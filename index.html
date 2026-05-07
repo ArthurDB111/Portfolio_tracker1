@@ -177,6 +177,12 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
 .sr-item:last-child{border-bottom:none}
 .sr-item:hover{background:var(--bg3)}
 .sr-sym{font-family:'DM Mono',monospace;font-weight:500;font-size:13px;color:var(--text);min-width:80px}
+/* Auth input focus — vervangt inline onfocus/onblur */
+#login-email:focus,#login-pass:focus,#reg-email:focus,#reg-pass:focus,#reg-pass2:focus{border-color:var(--blue)}
+/* Logout hover — vervangt inline onmouseover/onmouseout */
+#logout-btn:hover{color:var(--red)!important}
+/* WL dropdown hover — vervangt inline onmouseover/onmouseout */
+.wl-dd-item:hover{background:var(--bg3)}
 .sr-name{font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sr-exch{font-size:10px;color:var(--text3);background:var(--bg3);padding:2px 6px;border-radius:4px;white-space:nowrap;flex-shrink:0}
 .sr-loading{padding:10px 12px;font-size:12px;color:var(--text3);text-align:center}
@@ -286,11 +292,11 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
 
     <!-- Tabs -->
     <div style="display:flex;border-bottom:1px solid var(--border)">
-      <button id="tab-login" onclick="showTab('login')"
+      <button id="tab-login"
         style="flex:1;padding:13px;background:transparent;border:none;border-bottom:2px solid var(--blue);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer">
         Inloggen
       </button>
-      <button id="tab-register" onclick="showTab('register')"
+      <button id="tab-register"
         style="flex:1;padding:13px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer">
         Registreren
       </button>
@@ -301,29 +307,26 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">E-mailadres</div>
         <input id="login-email" type="email" placeholder="naam@email.com" autocomplete="email"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none"
-          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none">
       </div>
       <div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Wachtwoord</div>
         <div style="position:relative">
           <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"
-            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 40px 10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none"
-            onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'"
-            onkeydown="if(event.key==='Enter')doLogin()">
-          <button onclick="togglePassVis('login-pass',this)" type="button"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 40px 10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none">
+          <button id="toggle-login-pass" type="button"
             style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0">
             👁
           </button>
         </div>
       </div>
       <div id="login-err" style="font-size:12px;color:var(--red);min-height:14px"></div>
-      <button id="login-btn" onclick="doLogin()"
+      <button id="login-btn"
         style="padding:11px;background:var(--blue);color:#fff;border:none;border-radius:var(--r);font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer">
         Inloggen
       </button>
       <div style="text-align:center;margin-top:4px">
-        <button onclick="doResetPassword()" type="button"
+        <button id="reset-pass-btn" type="button"
           style="background:none;border:none;color:var(--text3);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;text-decoration:underline">
           Wachtwoord vergeten?
         </button>
@@ -335,29 +338,25 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">E-mailadres</div>
         <input id="reg-email" type="email" placeholder="naam@email.com"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none"
-          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none">
       </div>
       <div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Wachtwoord <span style="font-size:10px">(min. 8 tekens)</span></div>
         <div style="position:relative">
           <input id="reg-pass" type="password" placeholder="••••••••"
-            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 40px 10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none"
-            onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'">
-          <button onclick="togglePassVis('reg-pass',this)" type="button"
+            style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 40px 10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none">
+          <button id="toggle-reg-pass" type="button"
             style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0">👁</button>
         </div>
       </div>
       <div>
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">Wachtwoord bevestigen</div>
         <input id="reg-pass2" type="password" placeholder="••••••••"
-          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none"
-          onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'"
-          onkeydown="if(event.key==='Enter')doRegister()">
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none">
       </div>
       <div id="reg-err" style="font-size:12px;color:var(--red);min-height:14px"></div>
       <div id="reg-ok" style="font-size:12px;color:var(--green);min-height:14px;display:none"></div>
-      <button id="reg-btn" onclick="doRegister()"
+      <button id="reg-btn"
         style="padding:11px;background:var(--blue);color:#fff;border:none;border-radius:var(--r);font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer">
         Account aanmaken
       </button>
@@ -371,41 +370,41 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
   <aside class="sidebar">
     <div class="logo"><div class="wm">PORTFOLIO</div><div class="sub">Personal Tracker</div></div>
     <nav class="nav">
-      <div class="ni active" onclick="goTo('dashboard')">
+      <div class="ni active" data-page="dashboard">
         <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/></svg>
         Dashboard
       </div>
-      <div class="ni" onclick="goTo('assets')">
+      <div class="ni" data-page="assets">
         <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 8L8 2A6 6 0 0 1 13.2 11Z" fill="currentColor" opacity=".4"/><path d="M8 8L13.2 11A6 6 0 0 1 2 11Z" fill="currentColor" opacity=".6"/></svg>
         Asset klassen
       </div>
-      <div class="ni" onclick="goTo('dividends')">
+      <div class="ni" data-page="dividends">
         <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><path d="M8 5v6M5.5 7.5L8 5l2.5 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Dividenden
       </div>
-      <div class="ni" onclick="goTo('transactions')">
+      <div class="ni" data-page="transactions">
         <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h8M2 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         Transacties
       </div>
-      <div class="ni" onclick="goTo('cash')">
+      <div class="ni" data-page="cash">
         <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8.5" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M4 4V3M12 4V3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
         Cash & Alternatief
       </div>
-      <div class="ni" onclick="goTo('watchlist')">
+      <div class="ni" data-page="watchlist">
         <svg viewBox="0 0 16 16" fill="none"><path d="M8 2l1.5 3 3.5.5-2.5 2.5.5 3.5L8 10l-3 1.5.5-3.5L3 5.5 6.5 5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
         Watchlist
       </div>
-      <div class="ni" onclick="goTo('portfolios')">
+      <div class="ni" data-page="portfolios">
         <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="currentColor" stroke-width="1.2"/></svg>
         Portefeuilles
       </div>
     </nav>
     <div class="sb-bottom">
-      <button class="sync-btn" id="sync-btn" onclick="syncPrices()"><span id="sync-ico">↻</span> Prijzen verversen</button>
-      <button class="api-btn" id="api-btn" onclick="openApiModal()">⚙ Instellingen</button>
+      <button class="sync-btn" id="sync-btn"><span id="sync-ico">↻</span> Prijzen verversen</button>
+      <button class="api-btn" id="api-btn">⚙ Instellingen</button>
       <div class="sb-status"><span class="sb-dot" id="sb-dot"></span><span id="sb-label">Supabase: niet verbonden</span></div>
       <div class="last-sync" id="last-sync"></div>
-      <button onclick="doLogout()" style="width:100%;margin-top:8px;padding:7px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--text3)'">↩ Uitloggen</button>
+      <button id="logout-btn" style="width:100%;margin-top:8px;padding:7px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s">↩ Uitloggen</button>
       <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:6px" id="logged-in-as"></div>
     </div>
   </aside>
@@ -416,7 +415,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div class="ph">
         <div><div class="pt">Dashboard</div><div class="ps" id="pf-sub">Overzicht van je portefeuille</div></div>
         <div class="pacts">
-          <button class="btn btn-o btn-sm" onclick="openExportModal()">↓ Exporteren</button>
+          <button id="dash-export-btn" class="btn btn-o btn-sm">↓ Exporteren</button>
           <div id="live-badge" class="badge stale"><span class="pulse"></span> Laden...</div>
         </div>
       </div>
@@ -459,9 +458,9 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
         <div class="card">
           <div class="ct">Portefeuillewaarde vs Benchmark</div>
           <div class="brow">
-            <label class="tgl"><input type="checkbox" id="bench-on" checked onchange="renderLine()"><span class="ts"></span></label>
+            <label class="tgl"><input type="checkbox" id="bench-on" checked><span class="ts"></span></label>
             <label for="bench-on" style="font-size:12px;color:var(--text2);cursor:pointer">Benchmark</label>
-            <input class="ti" type="text" id="bench-sym" value="IWDA.AS" style="width:100px" onchange="loadBenchmark()">
+            <input class="ti" type="text" id="bench-sym" value="IWDA.AS" style="width:100px">
           </div>
           <div class="rrow" id="rrow"></div>
           <div class="leg" id="line-leg"></div>
@@ -503,7 +502,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
           <div class="fi"><label>Bedrag (€)</label><input id="d-amt" type="number" placeholder="24.50" min="0" step="any" style="width:110px"></div>
           <div class="fi"><label>Datum</label><input id="d-date" type="date" style="width:145px"></div>
           <div class="fi"><label>Omschrijving</label><input id="d-desc" type="text" placeholder="Q1 2025" style="width:120px"></div>
-          <button class="btn btn-p" onclick="addDiv()">Toevoegen</button>
+          <button id="add-div-btn" class="btn btn-p">Toevoegen</button>
           <span class="msg" id="d-msg"></span>
         </div>
       </div>
@@ -518,7 +517,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
     <div class="page" id="page-transactions">
       <div class="ph">
         <div><div class="pt">Transacties</div><div class="ps">Aan- en verkopen</div></div>
-        <button class="btn btn-o btn-sm" onclick="openExportModal()">↓ Exporteren</button>
+        <button id="tx-export-btn" class="btn btn-o btn-sm">↓ Exporteren</button>
       </div>
       <div class="asec">
         <div class="at">Nieuwe transactie</div>
@@ -527,17 +526,16 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
           <div class="fi">
             <label>Zoek aandeel / ETF</label>
             <input id="tx-tick" type="text" placeholder="Typ naam of ticker..." style="width:220px"
-              oninput="searchTicker(this.value)" autocomplete="off">
+              autocomplete="off">
           </div>
           <div class="fi"><label>Naam</label><input id="tx-name" type="text" placeholder="Klik op resultaat" style="width:150px"></div>
-          <div class="fi"><label>Aantal</label><input id="tx-qty" type="number" placeholder="10" min="0" step="any" style="width:80px" oninput="updatePriceHint()"></div>
+          <div class="fi"><label>Aantal</label><input id="tx-qty" type="number" placeholder="10" min="0" step="any" style="width:80px"></div>
           <div class="fi">
             <label style="display:flex;align-items:center;gap:6px">
               Prijs (€)
-              <span style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline" onclick="togglePriceMode()" id="price-mode-lbl" title="Klik om te wisselen">(per stuk)</span>
+              <span id="price-mode-lbl" style="font-size:10px;color:var(--text3);cursor:pointer;text-decoration:underline" title="Klik om te wisselen">(per stuk)</span>
             </label>
-            <input id="tx-price" type="number" placeholder="150.00" min="0" step="any" style="width:110px"
-              oninput="updatePriceHint()">
+            <input id="tx-price" type="number" placeholder="150.00" min="0" step="any" style="width:110px">
             <span id="price-hint" style="font-size:10px;color:var(--text3);display:block;margin-top:2px"></span>
           </div>
           <div class="fi"><label>Kosten (€)</label><input id="tx-fee" type="number" placeholder="0" min="0" step="any" style="width:80px" value="0"></div>
@@ -548,7 +546,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
               <option value="">— Geen —</option>
             </select>
           </div>
-          <button class="btn btn-p" onclick="addTx()">Toevoegen</button>
+          <button id="add-tx-btn" class="btn btn-p">Toevoegen</button>
           <span class="msg" id="tx-msg"></span>
         </div>
       </div>
@@ -574,7 +572,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div class="card" style="margin-bottom:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div class="ct" style="margin-bottom:0">💶 Cash & Spaarrekeningen</div>
-          <button class="btn btn-p btn-sm" onclick="openManualModal('cash')">+ Cash toevoegen</button>
+          <button id="add-cash-btn" class="btn btn-p btn-sm">+ Cash toevoegen</button>
         </div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Zichtrekening, spaarrekening, noodbuffer, tijdelijk niet belegd geld</div>
         <div id="cash-list"><div class="empty">Nog geen cashposities.</div></div>
@@ -584,7 +582,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div class="ct" style="margin-bottom:0">⭐ Alternatieve investeringen</div>
-          <button class="btn btn-p btn-sm" onclick="openManualModal('alts')">+ Investering toevoegen</button>
+          <button id="add-alts-btn" class="btn btn-p btn-sm">+ Investering toevoegen</button>
         </div>
         <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
           Pokémon verzameling, horloges, kunst, whisky, collectibles — waarde handmatig aanpassen wanneer nodig
@@ -597,7 +595,7 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
     <div class="page" id="page-portfolios">
       <div class="ph">
         <div><div class="pt">Portefeuilles</div><div class="ps">Meerdere portefeuilles beheren</div></div>
-        <button class="btn btn-p btn-sm" onclick="openPfModal()">+ Nieuw</button>
+        <button id="new-pf-btn" class="btn btn-p btn-sm">+ Nieuw</button>
       </div>
       <div id="pf-cards"></div>
     </div>
@@ -630,8 +628,8 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
     </div>
     <div id="cfg-status" style="font-size:12px;color:var(--text3);min-height:16px"></div>
     <div class="md-acts">
-      <button class="btn btn-o" onclick="closeApiModal()">Annuleren</button>
-      <button class="btn btn-p" onclick="saveConfig()">Opslaan & verbinden</button>
+      <button id="close-api-modal" class="btn btn-o">Annuleren</button>
+      <button id="save-config-btn" class="btn btn-p">Opslaan & verbinden</button>
     </div>
   </div>
 </div>
@@ -646,8 +644,8 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <input type="text" id="pf-modal-name" placeholder="bv. Pensioen, Speculatief..." style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;width:100%">
     </div>
     <div class="md-acts">
-      <button class="btn btn-o" onclick="closePfModal()">Annuleren</button>
-      <button class="btn btn-p" id="pf-modal-confirm" onclick="confirmPfModal()">Aanmaken</button>
+      <button id="close-pf-modal" class="btn btn-o">Annuleren</button>
+      <button id="pf-modal-confirm" class="btn btn-p">Aanmaken</button>
     </div>
   </div>
 </div>
@@ -677,8 +675,8 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
     </div>
     <div id="manual-err" style="font-size:12px;color:var(--red);min-height:16px;margin-top:8px"></div>
     <div class="md-acts">
-      <button class="btn btn-o" onclick="closeManualModal()">Annuleren</button>
-      <button class="btn btn-p" id="manual-confirm-btn" onclick="confirmManualModal()">Opslaan</button>
+      <button id="close-manual-modal" class="btn btn-o">Annuleren</button>
+      <button id="manual-confirm-btn" class="btn btn-p">Opslaan</button>
     </div>
   </div>
 </div>
@@ -689,12 +687,12 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
     <div class="md-title">↓ Exporteren</div>
     <div class="md-sub">Download je portefeuilledata.</div>
     <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-o" style="text-align:left;padding:12px 16px" onclick="doExport('tx')"><div style="font-weight:500">Transacties → CSV</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle aan- en verkopen</div></button>
-      <button class="btn btn-o" style="text-align:left;padding:12px 16px" onclick="doExport('div')"><div style="font-weight:500">Dividenden → CSV</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle uitkeringen</div></button>
-      <button class="btn btn-o" style="text-align:left;padding:12px 16px" onclick="doExport('pos')"><div style="font-weight:500">Posities → CSV</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Huidige posities met P&L</div></button>
-      <button class="btn btn-o" style="text-align:left;padding:12px 16px" onclick="doExport('json')"><div style="font-weight:500">Volledige backup → JSON</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle data + instellingen</div></button>
+      <button id="export-tx-btn" class="btn btn-o" style="text-align:left;padding:12px 16px"><div style="font-weight:500">Transacties → CSV</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle aan- en verkopen</div></button>
+      <button id="export-div-btn" class="btn btn-o" style="text-align:left;padding:12px 16px"><div style="font-weight:500">Dividenden → CSV</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle uitkeringen</div></button>
+      <button id="export-pos-btn" class="btn btn-o" style="text-align:left;padding:12px 16px"><div style="font-weight:500">Posities → CSV</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Huidige posities met P&L</div></button>
+      <button id="export-json-btn" class="btn btn-o" style="text-align:left;padding:12px 16px"><div style="font-weight:500">Volledige backup → JSON</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle data + instellingen</div></button>
     </div>
-    <div class="md-acts"><button class="btn btn-o" onclick="closeExpModal()">Sluiten</button></div>
+    <div class="md-acts"><button id="close-exp-modal" class="btn btn-o">Sluiten</button></div>
   </div>
 </div>
 
@@ -1540,8 +1538,8 @@ function renderAssets(){
       <span style="min-width:110px;font-size:13px">${cat}</span>
       <span style="min-width:44px;font-family:'DM Mono',monospace;font-size:12px">${cur.toFixed(1)}%</span>
       <input type="number" min="0" max="100" step="1" value="${tgt||''}" placeholder="Doel%"
-        style="width:75px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;color:var(--text);font-size:12px;outline:none"
-        onchange="setTgt('${cat}',this.value)">
+        data-action="set-tgt" data-cat="${cat}"
+        style="width:75px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;color:var(--text);font-size:12px;outline:none">
       <span style="font-size:11px;min-width:50px;color:${Math.abs(diff)<1?'var(--text3)':diff>0?'var(--green)':'var(--red)'}">${diff>=0?'+':''}${diff.toFixed(1)}%</span>
       <div class="pbw"><div class="pb" style="width:${Math.min(100,cur).toFixed(1)}%;background:${ACC[i]}"></div></div>
     </div>`;
@@ -1555,7 +1553,7 @@ function renderAssets(){
         <span style="font-family:'DM Mono',monospace;font-weight:500;min-width:70px">${p.ticker}</span>
         <span style="color:var(--text2);font-size:12px">${p.name}</span>
       </div>
-      <select onchange="setAC('${p.ticker}',this.value)"
+      <select data-action="set-ac" data-ticker="${p.ticker}"
         style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:5px 8px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;min-width:155px">
         ${opts}
       </select>
@@ -1635,7 +1633,7 @@ function renderDivPage(){
       <div style="display:flex;align-items:center;gap:12px;font-size:12px;color:var(--text2);flex-shrink:0">
         <span style="font-family:'DM Mono',monospace;color:var(--gold)">${fmt(d.amount)}</span>
         <span>${d.date}</span>
-        <button class="btn-d" onclick="delDiv(${d.id})">✕</button>
+        <button class="btn-d" data-action="del-div" data-id="${d.id}">✕</button>
       </div>
     </div>`).join('');
 }
@@ -2308,7 +2306,7 @@ function renderTxList(){
       <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);flex-shrink:0">
         <span style="font-family:'DM Mono',monospace">${tx.qty.toLocaleString('nl-BE',{maximumFractionDigits:6})} × ${fmt(tx.price)}${tx.fee?` + ${fmt(tx.fee)} kst`:''}</span>
         <span style="min-width:88px;text-align:right">${tx.date}</span>
-        <button class="btn-d" onclick="delTx(${i})">✕</button>
+        <button class="btn-d" data-action="del-tx" data-idx="${i}">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -2423,8 +2421,8 @@ function renderManualList(items, type){
       </div>
       <div class="mi-val" style="margin:0 16px;font-size:15px">${fmt(item.value)}</div>
       <div class="mi-acts">
-        <button class="edit-btn" onclick="openManualModal('${type}','${item.id}')">✎ Bewerken</button>
-        <button class="del-btn" onclick="deleteManualItem('${type}','${item.id}')">✕</button>
+        <button class="edit-btn" data-action="edit-manual" data-type="${type}" data-id="${item.id}">✎ Bewerken</button>
+        <button class="del-btn" data-action="del-manual" data-type="${type}" data-id="${item.id}">✕</button>
       </div>
     </div>`).join('');
 }
@@ -2549,9 +2547,9 @@ function renderPfPage(){
         </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-        ${!isAct?`<button class="btn btn-p btn-sm" onclick="switchPf('${p.id}')">Activeer</button>`:''}
-        <button class="btn btn-o btn-sm" onclick="openPfModal('rename','${p.id}','${p.name.replace(/'/g,"\\'")}')">Hernoemen</button>
-        ${portfolios.length>1?`<button class="btn-d" onclick="delPf('${p.id}')">Verwijderen</button>`:''}
+        ${!isAct?`<button class="btn btn-p btn-sm" data-action="switch-pf" data-id="${p.id}">Activeer</button>`:''}
+        <button class="btn btn-o btn-sm" data-action="rename-pf" data-id="${p.id}" data-name="${p.name.replace(/"/g,'&quot;')}">Hernoemen</button>
+        ${portfolios.length>1?`<button class="btn-d" data-action="del-pf" data-id="${p.id}">Verwijderen</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -2715,9 +2713,8 @@ async function searchTickerWL(q){
     if(!r||!r.length){ dd.style.display='none'; return; }
     dd.style.display='block';
     dd.innerHTML = r.slice(0,8).map(item=>`
-      <div onclick="selectWLTicker('${item.symbol}','${(item.name||'').replace(/'/g,"\'")}')}"
-        style="padding:8px 12px;cursor:pointer;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)"
-        onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <div class="wl-dd-item" data-action="select-wl" data-symbol="${item.symbol}" data-name="${(item.name||'').replace(/"/g,'&quot;')}"
+        style="padding:8px 12px;cursor:pointer;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)">
         <span style="font-family:'DM Mono',monospace;font-size:12px;color:var(--blue);min-width:70px">${item.symbol}</span>
         <span style="font-size:12px;color:var(--text2)">${item.name||''}</span>
       </div>`).join('');
@@ -2786,11 +2783,11 @@ function renderWatchlist(){
       <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
         <span style="font-family:'DM Mono',monospace;font-size:13px">${priceStr}</span>
         <span class="chg ${chgClass}" style="font-size:12px;min-width:60px;text-align:right">${chgStr}</span>
-        <button onclick="addWLToTx('${w.ticker}','${w.name.replace(/'/g,"\'")}')"
+        <button data-action="wl-to-tx" data-ticker="${w.ticker}" data-name="${w.name.replace(/"/g,'&quot;')}"
           style="padding:4px 8px;background:var(--blueBg);border:1px solid rgba(77,143,255,.3);border-radius:var(--r);color:var(--blue);font-size:11px;cursor:pointer">
           + Kopen
         </button>
-        <button class="btn-d" onclick="removeFromWatchlist('${w.ticker}')">✕</button>
+        <button class="btn-d" data-action="remove-wl" data-ticker="${w.ticker}">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -3079,6 +3076,105 @@ async function initApp(){
     window._refreshTimer = setInterval(()=>syncPrices(), REFRESH_INTERVAL);
   } catch(e){}
 }
+
+// ═══════════════════════════════════════════
+// STATISCHE EVENT BINDINGS — vervangt alle inline onclick/onchange
+// ═══════════════════════════════════════════
+(function bindStaticHandlers(){
+  // Auth tabs
+  document.getElementById('tab-login').addEventListener('click', ()=>showTab('login'));
+  document.getElementById('tab-register').addEventListener('click', ()=>showTab('register'));
+
+  // Login
+  document.getElementById('login-btn').addEventListener('click', doLogin);
+  document.getElementById('login-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  document.getElementById('reset-pass-btn').addEventListener('click', doResetPassword);
+  document.getElementById('toggle-login-pass').addEventListener('click', function(){ togglePassVis('login-pass', this); });
+
+  // Registreren
+  document.getElementById('reg-btn').addEventListener('click', doRegister);
+  document.getElementById('reg-pass2').addEventListener('keydown', e=>{ if(e.key==='Enter') doRegister(); });
+  document.getElementById('toggle-reg-pass').addEventListener('click', function(){ togglePassVis('reg-pass', this); });
+
+  // Navigatie — event delegation op .nav
+  document.querySelector('.nav').addEventListener('click', e=>{
+    const ni = e.target.closest('[data-page]');
+    if(ni) goTo(ni.dataset.page);
+  });
+
+  // Sidebar
+  document.getElementById('sync-btn').addEventListener('click', syncPrices);
+  document.getElementById('api-btn').addEventListener('click', openApiModal);
+  document.getElementById('logout-btn').addEventListener('click', doLogout);
+
+  // Dashboard
+  document.getElementById('dash-export-btn').addEventListener('click', openExportModal);
+  document.getElementById('bench-on').addEventListener('change', renderLine);
+  document.getElementById('bench-sym').addEventListener('change', loadBenchmark);
+
+  // Dividenden
+  document.getElementById('add-div-btn').addEventListener('click', addDiv);
+
+  // Transacties
+  document.getElementById('tx-export-btn').addEventListener('click', openExportModal);
+  document.getElementById('tx-tick').addEventListener('input', e=>searchTicker(e.target.value));
+  document.getElementById('tx-qty').addEventListener('input', updatePriceHint);
+  document.getElementById('price-mode-lbl').addEventListener('click', togglePriceMode);
+  document.getElementById('tx-price').addEventListener('input', updatePriceHint);
+  document.getElementById('add-tx-btn').addEventListener('click', addTx);
+
+  // Cash & Alternatief
+  document.getElementById('add-cash-btn').addEventListener('click', ()=>openManualModal('cash'));
+  document.getElementById('add-alts-btn').addEventListener('click', ()=>openManualModal('alts'));
+
+  // Portefeuilles
+  document.getElementById('new-pf-btn').addEventListener('click', ()=>openPfModal());
+
+  // Instellingen modal
+  document.getElementById('close-api-modal').addEventListener('click', closeApiModal);
+  document.getElementById('save-config-btn').addEventListener('click', saveConfig);
+
+  // Portefeuille modal
+  document.getElementById('close-pf-modal').addEventListener('click', closePfModal);
+  document.getElementById('pf-modal-confirm').addEventListener('click', confirmPfModal);
+
+  // Manuele positie modal
+  document.getElementById('close-manual-modal').addEventListener('click', closeManualModal);
+  document.getElementById('manual-confirm-btn').addEventListener('click', confirmManualModal);
+
+  // Export modal
+  document.getElementById('export-tx-btn').addEventListener('click', ()=>doExport('tx'));
+  document.getElementById('export-div-btn').addEventListener('click', ()=>doExport('div'));
+  document.getElementById('export-pos-btn').addEventListener('click', ()=>doExport('pos'));
+  document.getElementById('export-json-btn').addEventListener('click', ()=>doExport('json'));
+  document.getElementById('close-exp-modal').addEventListener('click', closeExpModal);
+})();
+
+// ═══════════════════════════════════════════
+// DYNAMISCHE EVENT DELEGATION — vervangt inline onclick/onchange in gegenereerde HTML
+// ═══════════════════════════════════════════
+document.addEventListener('click', function(e){
+  const el = e.target.closest('[data-action]');
+  if(!el) return;
+  const a = el.dataset.action;
+  if(a === 'del-div')      delDiv(el.dataset.id);
+  else if(a === 'del-tx')  delTx(parseInt(el.dataset.idx));
+  else if(a === 'switch-pf')   switchPf(el.dataset.id);
+  else if(a === 'rename-pf')   openPfModal('rename', el.dataset.id, el.dataset.name);
+  else if(a === 'del-pf')      delPf(el.dataset.id);
+  else if(a === 'edit-manual') openManualModal(el.dataset.type, el.dataset.id);
+  else if(a === 'del-manual')  deleteManualItem(el.dataset.type, el.dataset.id);
+  else if(a === 'select-wl')   selectWLTicker(el.dataset.symbol, el.dataset.name);
+  else if(a === 'wl-to-tx')    addWLToTx(el.dataset.ticker, el.dataset.name);
+  else if(a === 'remove-wl')   removeFromWatchlist(el.dataset.ticker);
+});
+
+document.addEventListener('change', function(e){
+  const el = e.target.closest('[data-action]');
+  if(!el) return;
+  if(el.dataset.action === 'set-tgt') setTgt(el.dataset.cat, el.value);
+  else if(el.dataset.action === 'set-ac') setAC(el.dataset.ticker, el.value);
+});
 
 // ═══════════════════════════════════════════
 // START — wacht op DOM + Supabase sessie
