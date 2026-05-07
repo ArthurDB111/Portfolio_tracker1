@@ -498,7 +498,11 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div class="asec">
         <div class="at">Dividend registreren</div>
         <div class="fr">
-          <div class="fi"><label>Ticker</label><input id="d-tick" type="text" placeholder="AAPL" style="width:90px;text-transform:uppercase"></div>
+          <div class="fi" style="position:relative">
+            <label>Ticker</label>
+            <input id="d-tick" type="text" placeholder="Zoek ticker..." style="width:180px;text-transform:uppercase" autocomplete="off">
+            <div id="div-search-dropdown" style="display:none;position:absolute;top:100%;left:0;width:320px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);z-index:9000;max-height:250px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.6)"></div>
+          </div>
           <div class="fi"><label>Bedrag (€)</label><input id="d-amt" type="number" placeholder="24.50" min="0" step="any" style="width:110px"></div>
           <div class="fi"><label>Datum</label><input id="d-date" type="date" style="width:145px"></div>
           <div class="fi"><label>Omschrijving</label><input id="d-desc" type="text" placeholder="Q1 2025" style="width:120px"></div>
@@ -598,6 +602,33 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
         <button id="new-pf-btn" class="btn btn-p btn-sm">+ Nieuw</button>
       </div>
       <div id="pf-cards"></div>
+    </div>
+
+    <!-- WATCHLIST -->
+    <div class="page" id="page-watchlist">
+      <div class="ph">
+        <div><div class="pt">Watchlist</div><div class="ps">Tickers volgen zonder te bezitten</div></div>
+      </div>
+      <div class="asec">
+        <div class="at">Ticker toevoegen</div>
+        <div class="fr">
+          <div class="fi" style="position:relative">
+            <label>Zoek aandeel / ETF</label>
+            <input id="wl-tick" type="text" placeholder="Typ naam of ticker..." style="width:220px;text-transform:uppercase" autocomplete="off">
+            <div id="wl-dropdown" style="display:none;position:absolute;top:100%;left:0;width:340px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);z-index:9000;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.6)"></div>
+          </div>
+          <div class="fi">
+            <label>Naam</label>
+            <input id="wl-name" type="text" placeholder="Wordt automatisch ingevuld" style="width:200px">
+          </div>
+          <button id="add-wl-btn" class="btn btn-p">Toevoegen</button>
+          <span class="msg" id="wl-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="ct">Gevolgde tickers</div>
+        <div id="wl-list"><div class="empty">Nog niets op je watchlist.</div></div>
+      </div>
     </div>
   </main>
 </div>
@@ -1581,7 +1612,7 @@ function addDiv(){
   msg.className='msg ok'; msg.textContent='✓ Toegevoegd';
   ['d-tick','d-amt','d-desc'].forEach(id=>document.getElementById(id).value='');
   setTimeout(()=>msg.textContent='',3000);
-  renderDivPage(); renderMetrics(getPositions());
+  renderDivPage(); renderMetrics(getPositions()); renderPosTable(getPositions());
 }
 
 function delDiv(id){
@@ -2208,6 +2239,56 @@ function pickTicker(symbol, name, exchange){
 
 function hideSearchResults(){
   setTimeout(function(){ document.getElementById('search-dropdown').style.display='none'; }, 200);
+}
+
+// ── Dividend ticker zoekfunctie ─────────────────────────────────────
+let _divSearchTimer;
+function searchDivTicker(query){
+  const dd = document.getElementById('div-search-dropdown');
+  clearTimeout(_divSearchTimer);
+  if(!query || query.length < 2){ dd.style.display='none'; return; }
+  const q = query.toUpperCase();
+  const local = TICKER_DB.filter(t =>
+    t.s.toUpperCase().indexOf(q) === 0 || t.n.toUpperCase().indexOf(q) === 0
+  ).slice(0, 10);
+  dd.style.display = 'block';
+  if(local.length > 0){
+    _showDivResults(dd, local);
+    _divSearchTimer = setTimeout(() => _fetchDivSearch(query, dd), 800);
+  } else {
+    dd.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text3)">Zoeken...</div>';
+    _divSearchTimer = setTimeout(() => _fetchDivSearch(query, dd), 400);
+  }
+}
+
+function _showDivResults(dd, items){
+  dd.innerHTML = '';
+  items.forEach(function(item){
+    const sym = item.s || item.symbol || '';
+    const name = item.n || item.name || '';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border)';
+    row.innerHTML = '<span style="font-family:DM Mono,monospace;font-weight:500;font-size:13px;min-width:90px;color:var(--text)">' + esc(sym) + '</span>' +
+      '<span style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(name) + '</span>';
+    row.addEventListener('mouseover', function(){ this.style.background='var(--bg3)'; });
+    row.addEventListener('mouseout',  function(){ this.style.background=''; });
+    row.addEventListener('click', function(){ pickDivTicker(sym); });
+    dd.appendChild(row);
+  });
+}
+
+function _fetchDivSearch(query, dd){
+  const serverUrl = getServerUrl();
+  if(!serverUrl) return;
+  fetch(serverUrl + '/search?q=' + encodeURIComponent(query), { signal: AbortSignal.timeout(10000) })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(items){ if(items && items.length) _showDivResults(dd, items); })
+    .catch(function(){});
+}
+
+function pickDivTicker(sym){
+  document.getElementById('d-tick').value = sym;
+  document.getElementById('div-search-dropdown').style.display = 'none';
 }
 
 
@@ -3114,6 +3195,8 @@ async function initApp(){
 
   // Dividenden
   document.getElementById('add-div-btn').addEventListener('click', addDiv);
+  document.getElementById('d-tick').addEventListener('input', e=>searchDivTicker(e.target.value));
+  document.getElementById('d-tick').addEventListener('blur', ()=>setTimeout(()=>{ document.getElementById('div-search-dropdown').style.display='none'; }, 200));
 
   // Transacties
   document.getElementById('tx-export-btn').addEventListener('click', openExportModal);
@@ -3129,6 +3212,11 @@ async function initApp(){
 
   // Portefeuilles
   document.getElementById('new-pf-btn').addEventListener('click', ()=>openPfModal());
+
+  // Watchlist
+  document.getElementById('wl-tick').addEventListener('input', e=>searchTickerWL(e.target.value));
+  document.getElementById('wl-tick').addEventListener('blur', ()=>setTimeout(()=>{ document.getElementById('wl-dropdown').style.display='none'; }, 200));
+  document.getElementById('add-wl-btn').addEventListener('click', addToWatchlist);
 
   // Instellingen modal
   document.getElementById('close-api-modal').addEventListener('click', closeApiModal);
