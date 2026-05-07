@@ -877,11 +877,12 @@ async function pullFromSupabase(){
 
     if(!divRes.error && divRes.data){
       dividends = divRes.data.map(d =>({
+        id:     d.id,
         ticker: d.ticker,
         amount: parseFloat(d.amount),
-        date: d.date,
-        desc: d.description||'',
-        pfId: d.portfolio_id||null,
+        date:   d.date,
+        desc:   d.description||'',
+        pfId:   d.portfolio_id||null,
       }));
     }
 
@@ -1181,6 +1182,7 @@ function goTo(id){
   document.querySelectorAll('.ni')[map[id]].classList.add('active');
   const sub=document.getElementById('pf-sub');
   if(sub) sub.textContent=portfolios.length>1?pf().name:'Overzicht van je portefeuille';
+  if(id==='dashboard')    renderAll();
   if(id==='assets')       renderAssets();
   if(id==='dividends')    renderDivPage();
   if(id==='transactions') renderTxList();
@@ -1617,7 +1619,7 @@ function addDiv(){
 
 function delDiv(id){
   if(!confirm('Dividend verwijderen?')) return;
-  dividends=dividends.filter(d=>d.id!==id);
+  dividends=dividends.filter(d=>String(d.id)!==String(id));
   saveLocal(); if(SB_OK) pushToSupabase(); renderDivPage(); renderMetrics(getPositions());
 }
 
