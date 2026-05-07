@@ -196,26 +196,6 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
 </head>
 <body>
 
-<!-- TOEGANGSCODE SCHERM -->
-<div id="access-screen" style="display:flex;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column">
-  <div style="text-align:center;margin-bottom:32px">
-    <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);letter-spacing:.12em;margin-bottom:6px">MIJN</div>
-    <div style="font-family:'DM Mono',monospace;font-size:20px;color:var(--text);letter-spacing:.06em">BEURSKOMPAS</div>
-  </div>
-  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r3);padding:28px;width:320px;max-width:92vw;text-align:center">
-    <div style="font-size:13px;color:var(--text2);margin-bottom:20px">Voer de toegangscode in</div>
-    <input id="access-input" type="password" inputmode="numeric" maxlength="10" placeholder="••••"
-      style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;color:var(--text);font-size:22px;font-family:'DM Mono',monospace;text-align:center;letter-spacing:.3em;outline:none;margin-bottom:12px"
-      onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--border)'"
-      onkeydown="if(event.key==='Enter') checkAccessCode()">
-    <div id="access-err" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
-    <button onclick="checkAccessCode()"
-      style="width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:var(--r);font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer">
-      Toegang
-    </button>
-  </div>
-</div>
-
 <!-- AUTH SCHERM -->
 <div id="auth-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9998;align-items:center;justify-content:center;flex-direction:column;padding:20px">
 
@@ -386,8 +366,6 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
   </div>
   <div id="auth-status" style="font-size:11px;color:var(--text3);text-align:center;margin-top:16px"></div>
 </div>
-
-<div id="login-screen" style="display:none"></div>
 
 <div class="shell" id="main-app" style="display:none">
   <aside class="sidebar">
@@ -646,11 +624,9 @@ td.num{text-align:right;font-family:'DM Mono',monospace}
       <div class="sec-sub">Gratis op <a href="https://finnhub.io" target="_blank">finnhub.io</a> → registreer → kopieer je API key (begint met pk_...)</div>
       <div class="api-field"><label>Finnhub API Key</label><input type="text" id="cfg-fh" placeholder="pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" spellcheck="false" autocomplete="off"></div>
     </div>
-    <div class="api-section gold">
-      <div class="sec-title">Supabase — Cloudopslag (optioneel)</div>
-      <div class="sec-sub">Gratis op <a href="https://supabase.com" target="_blank" style="color:var(--gold)">supabase.com</a> → Settings → API Keys → anon public key</div>
-      <div class="api-field"><label>Supabase URL</label><input type="text" id="cfg-su" placeholder="https://xxxx.supabase.co" spellcheck="false" autocomplete="off"></div>
-      <div class="api-field"><label>Supabase Anon Key</label><input type="text" id="cfg-sk" placeholder="eyJhbGciOiJ..." spellcheck="false" autocomplete="off"></div>
+    <div class="api-section" style="border-left-color:var(--green)">
+      <div class="sec-title">Supabase — Cloudopslag</div>
+      <div class="sec-sub" style="color:var(--green)">✓ Verbonden — data wordt automatisch gesynchroniseerd</div>
     </div>
     <div id="cfg-status" style="font-size:12px;color:var(--text3);min-height:16px"></div>
     <div class="md-acts">
@@ -808,17 +784,188 @@ function saveLocal(){
 }
 
 let SB_OK = false;
-async function initSupabase(){
-  const dot=document.getElementById('sb-dot');
-  const lbl=document.getElementById('sb-label');
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUPABASE DATASYNC — pull na login, push na elke wijziging
+// ═══════════════════════════════════════════════════════════════════════
+async function pullFromSupabase(){
+  const dot = document.getElementById('sb-dot');
+  const lbl = document.getElementById('sb-label');
   try{
-    const { data: { user } } = await _sb.auth.getUser();
-    if(user){ SB_OK=true; dot.className='sb-dot ok'; lbl.textContent='Supabase: verbonden ✓'; }
-    else { SB_OK=false; dot.className='sb-dot'; lbl.textContent='Supabase: niet verbonden'; }
-  }catch(e){ SB_OK=false; dot.className='sb-dot err'; lbl.textContent='Supabase: fout'; }
+    // getSession leest lokale opslag — geen extra networkverzoek nodig
+    const { data:{ session } } = await _sb.auth.getSession();
+    if(!session?.user){
+      if(lbl) lbl.textContent = 'Supabase: geen actieve sessie';
+      return;
+    }
+
+    const [pfRes, txRes, divRes, manRes, wlRes, acRes] = await Promise.all([
+      _sb.from('portfolios').select('*').order('created_at'),
+      _sb.from('transactions').select('*').order('date'),
+      _sb.from('dividends').select('*').order('date'),
+      _sb.from('manual_positions').select('*'),
+      _sb.from('watchlist').select('*').order('added_at'),
+      _sb.from('asset_config').select('*'),
+    ]);
+
+    if(pfRes.error){
+      console.warn('Supabase pull fout (portfolios):', pfRes.error);
+      if(dot) dot.className = 'sb-dot err';
+      if(lbl) lbl.textContent = 'Supabase fout: ' + pfRes.error.message;
+      return;
+    }
+
+    const pfData = pfRes.data || [];
+    const txData = txRes.data || [];
+
+    // Eerste login: Supabase is leeg → migreer bestaande localStorage-data naar cloud
+    if(pfData.length === 0){
+      SB_OK = true;
+      await pushToSupabase();
+      if(dot) dot.className = 'sb-dot ok';
+      if(lbl) lbl.textContent = 'Supabase: verbonden ✓';
+      return;
+    }
+
+    // Normaal geval: Supabase heeft data → overschrijf lokale state volledig
+    portfolios = pfData.map(p =>({
+      id: p.id,
+      name: p.name,
+      created: new Date(p.created_at).getTime(),
+      transactions: txData
+        .filter(tx => tx.portfolio_id === p.id)
+        .map(tx =>({
+          type: tx.type,
+          ticker: tx.ticker,
+          name: tx.name || tx.ticker,
+          qty: parseFloat(tx.qty),
+          price: parseFloat(tx.price),
+          fee: parseFloat(tx.fee||0),
+          date: tx.date,
+        }))
+    }));
+    if(!portfolios.find(p => p.id === activeId)) activeId = portfolios[0].id;
+
+    if(!divRes.error && divRes.data){
+      dividends = divRes.data.map(d =>({
+        ticker: d.ticker,
+        amount: parseFloat(d.amount),
+        date: d.date,
+        desc: d.description||'',
+        pfId: d.portfolio_id||null,
+      }));
+    }
+
+    if(!manRes.error && manRes.data){
+      manualPositions = { cash:[], alts:[] };
+      manRes.data.forEach(m =>{
+        const item = {
+          id: m.id,
+          name: m.name,
+          value: parseFloat(m.value),
+          subcat: m.subcat||'',
+          note: m.note||'',
+          updated: m.updated_at ? new Date(m.updated_at).toLocaleDateString('nl-BE') : '—',
+        };
+        if(m.type==='cash') manualPositions.cash.push(item);
+        else manualPositions.alts.push(item);
+      });
+    }
+
+    if(!wlRes.error && wlRes.data){
+      watchlist = wlRes.data.map(w =>({
+        ticker: w.ticker,
+        name: w.name||w.ticker,
+        addedAt: w.added_at,
+      }));
+    }
+
+    if(!acRes.error && acRes.data){
+      assetCls = {}; assetTgt = {};
+      acRes.data.forEach(a =>{
+        if(a.asset_class) assetCls[a.ticker] = a.asset_class;
+        if(a.target_weight) assetTgt[a.ticker] = parseFloat(a.target_weight);
+      });
+    }
+
+    saveLocal(); saveManual(); saveWatchlist();
+
+    SB_OK = true;
+    if(dot) dot.className = 'sb-dot ok';
+    if(lbl) lbl.textContent = 'Supabase: verbonden ✓';
+
+  }catch(e){
+    console.warn('pullFromSupabase fout:', e);
+    if(dot) dot.className = 'sb-dot err';
+    if(lbl) lbl.textContent = 'Supabase fout: ' + (e.message || 'onbekend');
+  }
 }
-async function pushToSupabase(){}
-async function pullFromSupabase(){}
+
+async function pushToSupabase(){
+  if(!SB_OK) return;
+  try{
+    const { data:{ session } } = await _sb.auth.getSession();
+    if(!session?.user) return;
+    const uid = session.user.id;
+
+    // 1. Portefeuilles upserten (op id)
+    await _sb.from('portfolios').upsert(
+      portfolios.map(p =>({
+        id: p.id, user_id: uid, name: p.name,
+        created_at: new Date(p.created||Date.now()).toISOString(),
+      })),
+      { onConflict:'id' }
+    );
+
+    // 2. Transacties: verwijder alles → herplaatsen (geen stabiele frontend-IDs)
+    await _sb.from('transactions').delete().eq('user_id', uid);
+    const allTx = portfolios.flatMap(p =>
+      (p.transactions||[]).map(tx =>({
+        user_id: uid, portfolio_id: p.id,
+        type: tx.type, ticker: tx.ticker, name: tx.name||tx.ticker,
+        qty: tx.qty, price: tx.price, fee: tx.fee||0, date: tx.date,
+      }))
+    );
+    if(allTx.length) await _sb.from('transactions').insert(allTx);
+
+    // 3. Dividenden: verwijder alles → herplaatsen
+    await _sb.from('dividends').delete().eq('user_id', uid);
+    const allDivs = dividends.map(d =>({
+      user_id: uid, portfolio_id: d.pfId||null,
+      ticker: d.ticker, amount: d.amount, date: d.date, description: d.desc||'',
+    }));
+    if(allDivs.length) await _sb.from('dividends').insert(allDivs);
+
+    // 4. Handmatige posities: verwijder alles → herplaatsen
+    await _sb.from('manual_positions').delete().eq('user_id', uid);
+    const allManual = [
+      ...(manualPositions.cash||[]).map(m =>({
+        user_id:uid, type:'cash', name:m.name, value:m.value,
+        subcat:m.subcat||null, note:m.note||null,
+      })),
+      ...(manualPositions.alts||[]).map(m =>({
+        user_id:uid, type:'alts', name:m.name, value:m.value,
+        subcat:m.subcat||null, note:m.note||null,
+      })),
+    ];
+    if(allManual.length) await _sb.from('manual_positions').insert(allManual);
+
+    // 5. Watchlist: verwijder alles → herplaatsen
+    await _sb.from('watchlist').delete().eq('user_id', uid);
+    const allWL = watchlist.map(w =>({ user_id:uid, ticker:w.ticker, name:w.name||w.ticker }));
+    if(allWL.length) await _sb.from('watchlist').insert(allWL);
+
+    // 6. Asset configuratie: verwijder alles → herplaatsen
+    await _sb.from('asset_config').delete().eq('user_id', uid);
+    const allAC = Object.entries(assetCls).map(([ticker, cls]) =>({
+      user_id:uid, ticker, asset_class:cls, target_weight:assetTgt[ticker]||0,
+    }));
+    if(allAC.length) await _sb.from('asset_config').insert(allAC);
+
+  }catch(e){
+    console.warn('pushToSupabase fout:', e);
+  }
+}
 
 // ═══════════════════════════════════
 // PRIJS OPHALEN
@@ -842,13 +989,6 @@ function getServerUrl(){
   } catch(e){ return ''; }
 }
 
-function getAuthHeader(){
-  // Gebruik de oude ptx_token voor de Render backend (koersenserver)
-  // De Supabase auth token wordt apart beheerd door de Supabase lib
-  const token = localStorage.getItem('ptx_token');
-  return token ? {'Authorization': 'Bearer '+token} : {};
-}
-
 // Rate limiting: max 30 server calls per 60 seconden
 const _rlCalls = [];
 function _checkRateLimit(){
@@ -863,31 +1003,22 @@ async function serverFetch(path, options={}){
   if(!url) return null;
   if(!_checkRateLimit()){ console.warn('Rate limit bereikt'); return null; }
   try{
-    // Stuur token mee als die er is, maar val NOOIT terug naar loginscherm bij 401
     const headers = {'Content-Type':'application/json', ...(options.headers||{})};
-    const token = localStorage.getItem('ptx_token');
-    if(token) headers['Authorization'] = 'Bearer ' + token;
+    // Stuur Supabase sessie-token mee voor server-side identificatie
+    try{
+      const { data:{ session } } = await _sb.auth.getSession();
+      if(session?.access_token) headers['Authorization'] = 'Bearer ' + session.access_token;
+    }catch(_){}
     const r = await fetch(url+path, {
       ...options,
       headers,
       signal: AbortSignal.timeout(15000)
     });
-    if(r.status===401){ 
-      console.warn("Server 401 - probeer zonder token");
-      // Probeer opnieuw zonder token
-      const r2 = await fetch(url+path, {
-        ...options,
-        headers: {'Content-Type':'application/json', ...(options.headers||{})},
-        signal: AbortSignal.timeout(15000)
-      });
-      if(!r2.ok) return null;
-      return r2.json();
-    }
     if(!r.ok) return null;
     return r.json();
-  }catch(e){ 
+  }catch(e){
     console.warn('serverFetch fout:', e.message);
-    return null; 
+    return null;
   }
 }
 
@@ -2056,10 +2187,8 @@ function showSearchResults(dd, items){
 
 function fetchServerSearch(query, dd){
   var serverUrl = getServerUrl();
-  var token = localStorage.getItem('ptx_token') || '';
   if(!serverUrl) return;
   fetch(serverUrl + '/search?q=' + encodeURIComponent(query), {
-    headers: {'Authorization': 'Bearer ' + token},
     signal: AbortSignal.timeout(30000)
   })
   .then(function(r){ if(!r.ok) return null; return r.json(); })
@@ -2435,8 +2564,6 @@ function openApiModal(){
   document.getElementById('cfg-server').value=CFG.server||'';
   if(document.getElementById('cfg-fmp')) document.getElementById('cfg-fmp').value=CFG.fmp||'';
   document.getElementById('cfg-fh').value=CFG.finnhub||'';
-  document.getElementById('cfg-su').value=CFG.sbUrl||'';
-  document.getElementById('cfg-sk').value=CFG.sbKey||'';
   document.getElementById('cfg-status').textContent='';
   document.getElementById('api-modal').classList.add('open');
 }
@@ -2447,32 +2574,15 @@ async function saveConfig(){
   CFG.server=document.getElementById('cfg-server').value.trim().replace(/\/$/,'');
   if(document.getElementById('cfg-fmp')) CFG.fmp=document.getElementById('cfg-fmp').value.trim();
   CFG.finnhub=document.getElementById('cfg-fh').value.trim();
-  CFG.sbUrl=document.getElementById('cfg-su').value.trim();
-  const rawKey = document.getElementById('cfg-sk').value.trim();
-  // Waarschuw als service_role key ingevoerd wordt (beveiligingsrisico)
-  if(rawKey.includes('service_role') || (rawKey.length > 100 && rawKey.split('.').length === 3)){
-    const jwtPart = rawKey.split('.')[1]||'';
-    try{
-      const decoded = JSON.parse(atob(jwtPart));
-      if(decoded.role === 'service_role'){
-        showToast('⚠️ GEVAAR: Dit is een service_role key — gebruik alleen de anon/public key!');
-        return;
-      }
-    } catch(e){}
-  }
-  CFG.sbKey=rawKey;
   saveCFG();
   const btn=document.getElementById('api-btn');
-  btn.className=(CFG.av||CFG.finnhub)?'api-btn ok':'api-btn';
-  btn.textContent=(CFG.av||CFG.finnhub)?'✓ Instellingen':'⚙ Instellingen';
+  btn.className='api-btn ok';
+  btn.textContent='✓ Instellingen';
   document.getElementById('cfg-status').textContent='Opgeslagen ✓';
   document.getElementById('cfg-status').style.color='var(--green)';
   closeApiModal();
   showToast('Instellingen opgeslagen ✓');
-  if(CFG.sbUrl&&CFG.sbKey) await initSupabase();
-  if(CFG.av||CFG.finnhub||getPositions().some(p=>CGMAP[p.ticker.toUpperCase()])){
-    syncPrices(); loadBenchmark();
-  }
+  if(getPositions().length) syncPrices();
 }
 
 // ═══════════════════════════════════
@@ -2515,50 +2625,6 @@ function showToast(msg){ const t=document.getElementById('toast'); t.textContent
 // ═══════════════════════════════════
 // RENDER ALL
 // ═══════════════════════════════════
-// ═══════════════════════════════════════════
-// TOEGANGSCODE
-// ═══════════════════════════════════════════
-const ACCESS_CODE_KEY = 'mbk_access_ok';
-const HARDCODED_CODE  = '2008'; // ← hier aanpassen
-
-let _accessAttempts = 0;
-let _accessLocked = false;
-
-function checkAccessCode(){
-  const err = document.getElementById('access-err');
-  if(_accessLocked){ err.textContent='Te veel pogingen — wacht 30 seconden.'; return; }
-  const val = document.getElementById('access-input').value.trim();
-  // Sanitize: alleen alfanumeriek, max 20 tekens
-  if(!val || val.length > 20 || !/^[a-zA-Z0-9]+$/.test(val)){
-    err.textContent = 'Ongeldige invoer.'; return;
-  }
-  if(val === HARDCODED_CODE){
-    _accessAttempts = 0;
-    localStorage.setItem(ACCESS_CODE_KEY, '1');
-    document.getElementById('access-screen').style.display='none';
-    err.textContent='';
-  } else {
-    _accessAttempts++;
-    if(_accessAttempts >= 5){
-      _accessLocked = true;
-      err.textContent='Te veel pogingen — wacht 30 seconden.';
-      document.getElementById('access-input').disabled = true;
-      setTimeout(()=>{
-        _accessLocked=false; _accessAttempts=0;
-        document.getElementById('access-input').disabled=false;
-        err.textContent='';
-      }, 30000);
-    } else {
-      err.textContent = `Onjuiste toegangscode. (${5-_accessAttempts} pogingen over)`;
-    }
-    document.getElementById('access-input').value='';
-  }
-}
-
-function checkAccess(){
-  return localStorage.getItem(ACCESS_CODE_KEY)==='1';
-}
-
 // ═══════════════════════════════════════════
 // WISSELKOERSEN (USD → EUR live)
 // ═══════════════════════════════════════════
@@ -2991,6 +3057,8 @@ async function initApp(){
   try{ loadWatchlist(); } catch(e){}
   try{ buildRangeBtns(); } catch(e){}
   try{ await loadFxRates(); } catch(e){}
+  // Haal data op uit Supabase (overschrijft localStorage-cache)
+  try{ await pullFromSupabase(); } catch(e){ console.warn('Supabase pull mislukt, localStorage als fallback:', e); }
   try{ renderAll(); } catch(e){}
   try{ renderTxList(); } catch(e){}
   try{ updateCashPayOptions(); } catch(e){}
@@ -3016,25 +3084,13 @@ async function initApp(){
 // START — wacht op DOM + Supabase sessie
 // ═══════════════════════════════════════════
 window.addEventListener('load', async function(){
-
-  // Verberg alles
-  document.getElementById('access-screen').style.display = 'none';
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('main-app').style.display = 'none';
 
-  // 1. Toegangscode
-  if(!checkAccess()){
-    document.getElementById('access-screen').style.display = 'flex';
-    await new Promise(resolve=>{
-      const iv = setInterval(()=>{ if(checkAccess()){ clearInterval(iv); resolve(); }}, 200);
-    });
-    document.getElementById('access-screen').style.display = 'none';
-  }
-
-  // 2. Server wakker maken
+  // Server wakker maken (Render free tier slaapt na inactiviteit)
   wakeUpServer();
 
-  // 3. Bestaande sessie check
+  // Bestaande Supabase sessie controleren
   try{
     const { data } = await _sb.auth.getSession();
     if(data?.session?.user){
@@ -3043,7 +3099,7 @@ window.addEventListener('load', async function(){
     }
   } catch(e){}
 
-  // 4. Geen sessie → loginscherm
+  // Geen sessie → loginscherm tonen
   _showAuth();
 });
 
