@@ -901,24 +901,70 @@ function renderAssets(){
 
   const el=document.getElementById('asset-tbl');
   if(!positions.length){ el.innerHTML='<div class="empty">Geen posities.</div>'; return; }
-  let html='<div style="padding:10px 0 6px;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">Doelgewichten</div>';
-  AC.forEach((cat,i)=>{
-    const cur=cats[cat]?(cats[cat]/total*100):0, tgt=parseFloat(assetTgt[cat]||0), diff=cur-tgt;
-    html+=`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <span class="ld" style="background:${ACC[i]};flex-shrink:0"></span>
-      <span style="min-width:110px;font-size:13px">${cat}</span>
-      <span style="min-width:44px;font-family:'DM Mono',monospace;font-size:12px">${cur.toFixed(1)}%</span>
-      <input type="number" min="0" max="100" step="1" value="${tgt||''}" placeholder="Doel%"
-        data-action="set-tgt" data-cat="${cat}"
-        style="width:75px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:4px 8px;color:var(--text);font-size:12px;outline:none">
-      <span style="font-size:11px;min-width:50px;color:${Math.abs(diff)<1?'var(--text3)':diff>0?'var(--green)':'var(--red)'}">${diff>=0?'+':''}${diff.toFixed(1)}%</span>
-      <div class="pbw"><div class="pb" style="width:${Math.min(100,cur).toFixed(1)}%;background:${ACC[i]}"></div></div>
+
+  // ── Allocatie & doelgewichten ────────────────────────────────────
+  let html='<div class="alloc-section-title">Allocatie & rebalancering</div>';
+  const relevantCats = AC.filter(cat => cats[cat]||assetTgt[cat]);
+  if(cats['Niet ingesteld']) relevantCats.push('Niet ingesteld');
+
+  relevantCats.forEach(cat=>{
+    const idx   = AC.indexOf(cat);
+    const color = idx>=0 ? ACC[idx%ACC.length] : '#8b8fa8';
+    const cur   = total>0 ? (cats[cat]||0)/total*100 : 0;
+    const tgt   = parseFloat(assetTgt[cat]||0);
+    const hasTgt= tgt>0;
+    const diff  = cur-tgt;
+    const val   = cats[cat]||0;
+
+    // Badge: groen (ok), goud (te veel), rood (te weinig), of waarschuwing
+    let badgeClass='', badgeText='';
+    if(cat==='Niet ingesteld'){
+      badgeClass='warn'; badgeText='⚠ Wijs categorie toe';
+    } else if(hasTgt){
+      if(Math.abs(diff)<1){ badgeClass='ok'; badgeText='✓ op doel'; }
+      else if(diff>0){ badgeClass='over'; badgeText='+'+diff.toFixed(1)+'% te veel'; }
+      else { badgeClass='under'; badgeText=diff.toFixed(1)+'% te weinig'; }
+    }
+
+    // Rebalanceer-hint (alleen als doel ingesteld en afwijking ≥ 0.5%)
+    let hintHtml='';
+    if(hasTgt && total>0 && Math.abs(diff)>=0.5){
+      const delta = (tgt/100*total) - val;
+      const action= delta>0?'Koop':'Verkoop';
+      const cls   = delta>0?'buy':'sell';
+      hintHtml=`<div class="alloc-hint ${cls}">${action} ${fmt(Math.abs(delta))} om doel te bereiken</div>`;
+    } else if(hasTgt && Math.abs(diff)<1){
+      hintHtml=`<div class="alloc-hint ok">Geen actie nodig</div>`;
+    }
+
+    html+=`<div class="alloc-row">
+      <div class="alloc-head">
+        <span class="alloc-dot" style="background:${color}"></span>
+        <span class="alloc-name">${cat}</span>
+        <span class="alloc-pct">${cur.toFixed(1)}%</span>
+        ${badgeText?`<span class="alloc-badge ${badgeClass}">${badgeText}</span>`:''}
+        <span class="alloc-tgt-lbl">Doel %</span>
+        <input type="number" min="0" max="100" step="1" value="${tgt||''}" placeholder="–"
+          class="alloc-input" data-action="set-tgt" data-cat="${cat}">
+        <span class="alloc-val">${val>0?fmt(val):''}</span>
+      </div>
+      <div class="alloc-bar-wrap">
+        <div class="alloc-bar-cur" style="width:${Math.min(100,cur).toFixed(1)}%;background:${color}"></div>
+        ${hasTgt?`<div class="alloc-bar-tgt" style="left:${Math.min(99.5,tgt).toFixed(1)}%"></div>`:''}
+      </div>
+      ${hintHtml}
     </div>`;
   });
-  html+='<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Categorie per positie</div>';
+
+  if(!relevantCats.length){
+    html+='<div class="empty" style="padding:20px 0">Wijs categorieën toe aan posities om doelgewichten in te stellen.</div>';
+  }
+
+  // ── Categorie per positie ────────────────────────────────────────
+  html+='<div class="alloc-section-title" style="margin-top:8px">Categorie per positie</div>';
   positions.forEach(p=>{
     const sel=assetCls[p.ticker]||'';
-    const opts=['',...AC].map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c||'— Kies —'}</option>`).join('');
+    const opts=['',...AC].map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c||'— Kies categorie —'}</option>`).join('');
     html+=`<div class="txr">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-family:'DM Mono',monospace;font-weight:500;min-width:70px">${p.ticker}</span>
