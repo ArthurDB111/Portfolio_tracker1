@@ -2516,6 +2516,182 @@ async function startApp(email){
 }
 
 // ═══════════════════════════════════════════
+// CSV IMPORT
+// ═══════════════════════════════════════════
+const _CSV_ALIASES = {
+  date:   ['date','datum','dag','transactiedatum','trade date','trade_date','handelsdatum'],
+  type:   ['type','action','actie','richting','kant','transactietype','side','transaction type'],
+  ticker: ['ticker','symbol','symbool','instrument','code','security','isin','aandeel'],
+  qty:    ['qty','quantity','aantal','shares','stuks','hoeveelheid','volume','units','aantal stuks'],
+  price:  ['price','prijs','koers','unit price','stuksprijs','aankoopkoers','rate','koers/stuk','gemiddelde koers'],
+  fee:    ['fee','fees','commissie','kosten','cost','costs','transaction fee','transactiekosten','brokerage','provisie'],
+  name:   ['name','naam','company','bedrijf','description','omschrijving','instrument name','effectnaam'],
+};
+let _csvParsed=[];
+
+function openCsvModal(){
+  document.getElementById('csv-modal').classList.add('open');
+  document.getElementById('csv-step1').style.display='';
+  document.getElementById('csv-step2').style.display='none';
+  document.getElementById('csv-import-btn').style.display='none';
+  document.getElementById('csv-back-btn').style.display='none';
+  document.getElementById('csv-file-input').value='';
+  _csvParsed=[];
+}
+function closeCsvModal(){ document.getElementById('csv-modal').classList.remove('open'); }
+
+function _csvDelim(text){
+  const line=text.split('\n')[0]||'';
+  return (line.match(/;/g)||[]).length>(line.match(/,/g)||[]).length?';':',';
+}
+
+function _csvParseRaw(text){
+  const d=_csvDelim(text);
+  const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+  if(lines.length<2) return{headers:[],rows:[]};
+  const headers=lines[0].split(d).map(h=>h.trim().replace(/^"+|"+$/g,'').toLowerCase());
+  const rows=lines.slice(1).map(line=>{
+    const cells=[]; let cur='',inQ=false;
+    for(let i=0;i<line.length;i++){
+      if(line[i]==='"'){inQ=!inQ;}
+      else if(line[i]===d&&!inQ){cells.push(cur.trim());cur='';}
+      else{cur+=line[i];}
+    }
+    cells.push(cur.trim()); return cells;
+  });
+  return{headers,rows};
+}
+
+function _csvCol(headers,field){
+  const aliases=_CSV_ALIASES[field]||[];
+  for(const a of aliases){
+    const i=headers.findIndex(h=>h===a||h.includes(a)||a.includes(h));
+    if(i>=0) return i;
+  }
+  return -1;
+}
+
+function _csvType(val){
+  if(!val) return null;
+  const v=val.toLowerCase().trim();
+  if(['buy','koop','aankoop','b','k','bought','gekocht','purchase'].some(x=>v.includes(x))) return 'BUY';
+  if(['sell','verkoop','v','s','sold','verkocht','sale'].some(x=>v.includes(x))) return 'SELL';
+  return null;
+}
+
+function _csvDate(val){
+  if(!val) return null;
+  val=val.trim().replace(/["']/g,'');
+  if(/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const m1=val.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  if(m1){
+    const a=parseInt(m1[1]),b=parseInt(m1[2]);
+    const [D,M]= a>12?[m1[1],m1[2]]:[m1[2],m1[1]]; // if first > 12 it's day
+    return`${m1[3]}-${M.padStart(2,'0')}-${D.padStart(2,'0')}`;
+  }
+  const m2=val.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if(m2) return`${m2[1]}-${m2[2].padStart(2,'0')}-${m2[3].padStart(2,'0')}`;
+  return null;
+}
+
+function _csvNum(val){
+  if(!val) return 0;
+  let s=val.toString().replace(/[€$£\s%]/g,'');
+  // Remove thousand separators but keep decimal: 1.234,56 → 1234.56 ; 1,234.56 → 1234.56
+  if(/\d[.,]\d{3}(?:[,.]|$)/.test(s)) s=s.replace(/[.,](?=\d{3}(?:[,.]|$))/g,'');
+  s=s.replace(',','.');
+  const n=parseFloat(s);
+  return isNaN(n)?0:n;
+}
+
+function _csvProcess(text){
+  const{headers,rows}=_csvParseRaw(text);
+  if(!headers.length) return{valid:[],invalid:[],headers};
+  const col={};
+  for(const f of Object.keys(_CSV_ALIASES)) col[f]=_csvCol(headers,f);
+  const valid=[],invalid=[];
+  rows.forEach((cells,ri)=>{
+    const g=f=>col[f]>=0?(cells[col[f]]||'').trim():'';
+    const date  =_csvDate(g('date'));
+    const type  =_csvType(g('type'));
+    const ticker=g('ticker').toUpperCase().replace(/[^A-Z0-9.\-]/g,'').slice(0,20);
+    const qty   =_csvNum(g('qty'));
+    const price =_csvNum(g('price'));
+    const fee   =_csvNum(g('fee'));
+    const name  =g('name')||ticker;
+    const errs=[];
+    if(!date)        errs.push('datum ongeldig');
+    if(!type)        errs.push('type onbekend');
+    if(!ticker)      errs.push('ticker leeg');
+    if(qty<=0)       errs.push('aantal ongeldig');
+    if(price<=0)     errs.push('prijs ongeldig');
+    const row={date,type,ticker,qty,price,fee,name,_row:ri+2,_errors:errs};
+    errs.length?invalid.push(row):valid.push(row);
+  });
+  return{valid,invalid,headers,col};
+}
+
+function _csvShowPreview(result){
+  const{valid,invalid}=result;
+  document.getElementById('csv-step1').style.display='none';
+  document.getElementById('csv-step2').style.display='';
+  document.getElementById('csv-back-btn').style.display='';
+  const th='padding:7px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);border-bottom:2px solid var(--border);background:var(--bg3);white-space:nowrap';
+  const td='padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border);white-space:nowrap';
+  document.getElementById('csv-preview-head').innerHTML=
+    ['Rij','Datum','Type','Ticker','Aantal','Prijs','Kosten','Status']
+    .map(h=>`<th style="${th}">${h}</th>`).join('');
+  const allRows=[...valid,...invalid].sort((a,b)=>a._row-b._row);
+  document.getElementById('csv-preview-body').innerHTML=allRows.slice(0,60).map(r=>{
+    const ok=!r._errors.length;
+    const bg=ok?'':'rgba(255,91,107,0.06)';
+    const tc=r.type==='BUY'?'var(--green)':r.type==='SELL'?'var(--red)':'var(--text3)';
+    const status=ok?'<span style="color:var(--green)">✓</span>':`<span style="color:var(--red)"title="${r._errors.join(', ')}">✗ ${r._errors.join(', ')}</span>`;
+    return`<tr style="background:${bg}">
+      <td style="${td};color:var(--text3)">${r._row}</td>
+      <td style="${td}">${r.date||'—'}</td>
+      <td style="${td};color:${tc};font-weight:500">${r.type||'?'}</td>
+      <td style="${td};font-family:'DM Mono',monospace;font-weight:500">${r.ticker||'—'}</td>
+      <td style="${td};text-align:right;font-family:'DM Mono',monospace">${r.qty>0?r.qty:''}</td>
+      <td style="${td};text-align:right;font-family:'DM Mono',monospace">${r.price>0?fmt(r.price):''}</td>
+      <td style="${td};text-align:right;font-family:'DM Mono',monospace">${r.fee>0?fmt(r.fee):'—'}</td>
+      <td style="${td}">${status}</td></tr>`;
+  }).join('');
+  const msgEl=document.getElementById('csv-parse-msg');
+  if(!valid.length){
+    msgEl.innerHTML='<span style="color:var(--red)">⚠ Geen geldige transacties gevonden. Controleer het formaat.</span>';
+    document.getElementById('csv-import-btn').style.display='none';
+    _csvParsed=[];
+  } else {
+    msgEl.innerHTML=`<span style="color:var(--green)">✓ <strong>${valid.length}</strong> transactie${valid.length!==1?'s':''} klaar voor import</span>`+
+      (invalid.length?` &nbsp; <span style="color:var(--gold)">⚠ ${invalid.length} rij${invalid.length!==1?'en':''} overgeslagen</span>`:'');
+    document.getElementById('csv-import-btn').style.display='';
+    _csvParsed=valid;
+  }
+  const sumEl=document.getElementById('csv-summary');
+  sumEl.textContent=allRows.length>60?`Toont eerste 60 van ${allRows.length} rijen.`:'';
+}
+
+function doCsvImport(){
+  if(!_csvParsed.length) return;
+  let added=0,skipped=0;
+  const portfolio=pf();
+  _csvParsed.forEach(r=>{
+    const dup=(portfolio.transactions||[]).some(t=>
+      t.date===r.date&&t.ticker===r.ticker&&t.type===r.type&&Math.abs(t.qty-r.qty)<0.0001);
+    if(dup){skipped++;return;}
+    portfolio.transactions.push({type:r.type,ticker:r.ticker,name:r.name||r.ticker,qty:r.qty,price:r.price,fee:r.fee||0,date:r.date});
+    added++;
+  });
+  portfolio.transactions.sort((a,b)=>a.date.localeCompare(b.date));
+  saveLocal();
+  if(SB_OK) pushToSupabase();
+  closeCsvModal();
+  renderAll(); renderTxList();
+  showToast(`✓ ${added} transactie${added!==1?'s':''} geïmporteerd`+(skipped?` (${skipped} dubbel overgeslagen)`:''));
+}
+
+// ═══════════════════════════════════════════
 // HOOFD-INIT
 // ═══════════════════════════════════════════
 async function initApp(){
@@ -2624,7 +2800,41 @@ async function initApp(){
   document.getElementById('export-pos-btn').addEventListener('click', ()=>doExport('pos'));
   document.getElementById('export-json-btn').addEventListener('click', ()=>doExport('json'));
   document.getElementById('close-exp-modal').addEventListener('click', closeExpModal);
+
+  // CSV import
+  document.getElementById('csv-import-open-btn').addEventListener('click', openCsvModal);
+  document.getElementById('close-csv-modal').addEventListener('click', closeCsvModal);
+  document.getElementById('csv-back-btn').addEventListener('click', ()=>{
+    document.getElementById('csv-step1').style.display='';
+    document.getElementById('csv-step2').style.display='none';
+    document.getElementById('csv-import-btn').style.display='none';
+    document.getElementById('csv-back-btn').style.display='none';
+    _csvParsed=[];
+  });
+  document.getElementById('csv-import-btn').addEventListener('click', doCsvImport);
+  document.getElementById('csv-modal').addEventListener('click', e=>{ if(e.target===e.currentTarget) closeCsvModal(); });
+
+  // Drop zone: klik opent bestandsdialoog
+  const dropZone=document.getElementById('csv-drop-zone');
+  const fileInput=document.getElementById('csv-file-input');
+  dropZone.addEventListener('click', ()=>fileInput.click());
+  dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', ()=>dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e=>{
+    e.preventDefault(); dropZone.classList.remove('drag');
+    const file=e.dataTransfer?.files?.[0];
+    if(file) _csvReadFile(file);
+  });
+  fileInput.addEventListener('change', ()=>{
+    if(fileInput.files?.[0]) _csvReadFile(fileInput.files[0]);
+  });
 })();
+
+function _csvReadFile(file){
+  const reader=new FileReader();
+  reader.onload=e=>{ const result=_csvProcess(e.target.result||''); _csvShowPreview(result); };
+  reader.readAsText(file, 'UTF-8');
+}
 
 // ═══════════════════════════════════════════
 // DYNAMISCHE EVENT DELEGATION — vervangt inline onclick/onchange in gegenereerde HTML

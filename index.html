@@ -338,7 +338,10 @@
     <div class="page" id="page-transactions">
       <div class="ph">
         <div><div class="pt">Transacties</div><div class="ps">Aan- en verkopen</div></div>
-        <button id="tx-export-btn" class="btn btn-o btn-sm">↓ Exporteren</button>
+        <div class="pacts">
+          <button id="csv-import-open-btn" class="btn btn-o btn-sm">↑ CSV import</button>
+          <button id="tx-export-btn" class="btn btn-o btn-sm">↓ Exporteren</button>
+        </div>
       </div>
       <div class="asec">
         <div class="at">Nieuwe transactie</div>
@@ -541,6 +544,47 @@
       <button id="export-json-btn" class="btn btn-o" style="text-align:left;padding:12px 16px"><div style="font-weight:500">Volledige backup → JSON</div><div style="font-size:11px;color:var(--text3);margin-top:2px">Alle data + instellingen</div></button>
     </div>
     <div class="md-acts"><button id="close-exp-modal" class="btn btn-o">Sluiten</button></div>
+  </div>
+</div>
+
+<!-- CSV IMPORT MODAL -->
+<div class="mo" id="csv-modal">
+  <div class="md" style="width:700px;max-width:96vw">
+    <div class="md-title">Transacties importeren via CSV</div>
+    <div class="md-sub">Laad een CSV-bestand van je broker of spreadsheet. Kolomvolgorde is vrij — namen worden automatisch herkend.</div>
+
+    <!-- Stap 1: upload -->
+    <div id="csv-step1">
+      <div id="csv-drop-zone" class="csv-drop">
+        <div style="font-size:32px;margin-bottom:8px">📂</div>
+        <div style="font-size:13px">Sleep een CSV-bestand hierheen of klik om te selecteren</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">CSV of TXT — scheidingsteken komma of puntkomma</div>
+        <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none">
+      </div>
+      <div style="background:var(--bg3);border-radius:var(--r);padding:12px;font-size:12px;color:var(--text2);margin-top:12px">
+        <div style="font-weight:500;margin-bottom:5px;color:var(--text)">Verwacht formaat (kolomnamen vrij):</div>
+        <code style="color:var(--blue)">datum, type (BUY/SELL of Koop/Verkoop), ticker, aantal, prijs, kosten</code>
+        <div style="margin-top:5px;color:var(--text3)">Datum: YYYY-MM-DD, DD/MM/YYYY of DD-MM-YYYY.</div>
+      </div>
+    </div>
+
+    <!-- Stap 2: preview -->
+    <div id="csv-step2" style="display:none">
+      <div id="csv-parse-msg" style="font-size:13px;margin-bottom:10px;padding:8px 12px;border-radius:var(--r);background:var(--bg3)"></div>
+      <div style="overflow-x:auto;max-height:320px;overflow-y:auto;border-radius:var(--r);border:1px solid var(--border)">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr id="csv-preview-head"></tr></thead>
+          <tbody id="csv-preview-body"></tbody>
+        </table>
+      </div>
+      <div id="csv-summary" style="font-size:11px;color:var(--text3);margin-top:6px"></div>
+    </div>
+
+    <div class="md-acts">
+      <button id="close-csv-modal" class="btn btn-o">Annuleren</button>
+      <button id="csv-back-btn" class="btn btn-o" style="display:none">← Terug</button>
+      <button id="csv-import-btn" class="btn btn-p" style="display:none">Importeren</button>
+    </div>
   </div>
 </div>
 
