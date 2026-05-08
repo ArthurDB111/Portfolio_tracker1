@@ -26,7 +26,7 @@ if(!CFG.server){ CFG.server='https://arbo-invest-tracker.onrender.com'; saveCFG(
 // ═══════════════════════════════════
 // STATE
 // ═══════════════════════════════════
-let portfolios, activeId, prices, assetCls, assetTgt, dividends;
+let portfolios, activeId, prices, assetCls, assetTgt, dividends, tobTypes;
 
 // ── Handmatige posities (cash + alternatief) ─────────────────────
 let manualPositions = { cash: [], alts: [] };
@@ -59,10 +59,11 @@ function loadState(){
     assetCls  = JSON.parse(localStorage.getItem('ptx_ac')||'{}');
     assetTgt  = JSON.parse(localStorage.getItem('ptx_at')||'{}');
     dividends = JSON.parse(localStorage.getItem('ptx_dv')||'[]');
+    tobTypes  = JSON.parse(localStorage.getItem('ptx_tob')||'{}');
     loadManual();
   }catch(e){
     portfolios=[{id:'default',name:'Mijn Portefeuille',transactions:[],created:Date.now()}];
-    activeId='default'; prices={}; assetCls={}; assetTgt={}; dividends=[];
+    activeId='default'; prices={}; assetCls={}; assetTgt={}; dividends=[]; tobTypes={};
   }
 }
 loadState();
@@ -78,6 +79,7 @@ function saveLocal(){
   localStorage.setItem('ptx_ac',  JSON.stringify(assetCls));
   localStorage.setItem('ptx_at',  JSON.stringify(assetTgt));
   localStorage.setItem('ptx_dv',  JSON.stringify(dividends));
+  localStorage.setItem('ptx_tob', JSON.stringify(tobTypes));
 }
 
 let SB_OK = false;
@@ -961,19 +963,28 @@ function renderAssets(){
   }
 
   // ── Categorie per positie ────────────────────────────────────────
-  html+='<div class="alloc-section-title" style="margin-top:8px">Categorie per positie</div>';
+  html+='<div class="alloc-section-title" style="margin-top:8px">Categorie per positie &amp; TOB-type</div>';
+  const tobOpts = ['',...Object.keys(TOB_RATES)];
   positions.forEach(p=>{
     const sel=assetCls[p.ticker]||'';
+    const tobSel=tobTypes[p.ticker]||'';
     const opts=['',...AC].map(c=>`<option value="${c}" ${c===sel?'selected':''}>${c||'— Kies categorie —'}</option>`).join('');
-    html+=`<div class="txr">
-      <div style="display:flex;align-items:center;gap:10px">
+    const tOpts=tobOpts.map(v=>`<option value="${v}" ${v===tobSel?'selected':''}>${TOB_LABELS[v]||'— TOB-type —'}</option>`).join('');
+    html+=`<div class="txr" style="flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px;min-width:140px;flex:1">
         <span style="font-family:'DM Mono',monospace;font-weight:500;min-width:70px">${p.ticker}</span>
         <span style="color:var(--text2);font-size:12px">${p.name}</span>
       </div>
-      <select data-action="set-ac" data-ticker="${p.ticker}"
-        style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:5px 8px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;min-width:155px">
-        ${opts}
-      </select>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <select data-action="set-ac" data-ticker="${p.ticker}"
+          style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:5px 8px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;min-width:155px">
+          ${opts}
+        </select>
+        <select data-action="set-tob" data-ticker="${p.ticker}"
+          style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:5px 8px;color:var(--text);font-size:12px;font-family:'DM Sans',sans-serif;outline:none;min-width:195px">
+          ${tOpts}
+        </select>
+      </div>
     </div>`;
   });
   el.innerHTML=html;
@@ -981,6 +992,77 @@ function renderAssets(){
 
 function setAC(t,v){ if(v) assetCls[t]=v; else delete assetCls[t]; saveLocal(); if(SB_OK) pushToSupabase(); renderAssets(); showToast(t+' → '+(v||'Verwijderd')); }
 function setTgt(c,v){ const n=parseFloat(v)||0; if(n>0) assetTgt[c]=n; else delete assetTgt[c]; saveLocal(); if(SB_OK) pushToSupabase(); }
+function setTOB(ticker,v){ if(v) tobTypes[ticker]=v; else delete tobTypes[ticker]; saveLocal(); renderTOBCard(); showToast(ticker+' TOB → '+(v||'Geen')); }
+
+// ═══════════════════════════════════
+// TOB — Taks op Beursverrichtingen
+// ═══════════════════════════════════
+const TOB_RATES = {
+  'aandeel':  { rate: 0.0035, cap: 1600 },
+  'etf-acc':  { rate: 0.0132, cap: 4000 },
+  'etf-dis':  { rate: 0.0012, cap: 1250 },
+  'obligatie':{ rate: 0.0012, cap: 1250 },
+  'vrij':     { rate: 0,      cap: 0    },
+};
+const TOB_LABELS = {
+  'aandeel':  'Aandeel (0,35%)',
+  'etf-acc':  'ETF Accumulerend (1,32%)',
+  'etf-dis':  'ETF Distribuerend (0,12%)',
+  'obligatie':'Obligatie (0,12%)',
+  'vrij':     'Vrijgesteld (0%)',
+};
+
+function calcTOB(ticker, txValue){
+  const type = tobTypes[ticker];
+  if(!type || !TOB_RATES[type]) return 0;
+  const {rate, cap} = TOB_RATES[type];
+  return Math.min(txValue * rate, cap);
+}
+
+function renderTOBCard(){
+  const el = document.getElementById('tob-card');
+  if(!el) return;
+  const t = txs();
+  const year = new Date().getFullYear();
+  let yearTotal = 0, allTotal = 0;
+  t.forEach(tx => {
+    if(tx.type.toUpperCase() !== 'BUY') return;
+    const val = tx.qty * tx.price;
+    const tob = calcTOB(tx.ticker, val);
+    allTotal += tob;
+    if(tx.date && tx.date.startsWith(String(year))) yearTotal += tob;
+  });
+  // breakdown per ticker (buy only)
+  const byTicker = {};
+  t.forEach(tx => {
+    if(tx.type.toUpperCase() !== 'BUY') return;
+    const val = tx.qty * tx.price;
+    const tob = calcTOB(tx.ticker, val);
+    if(tob > 0){
+      if(!byTicker[tx.ticker]) byTicker[tx.ticker]={ tob:0, type:tobTypes[tx.ticker] };
+      byTicker[tx.ticker].tob += tob;
+    }
+  });
+  const rows = Object.entries(byTicker).sort((a,b)=>b[1].tob-a[1].tob).slice(0,8);
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">TOB ${year}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text);margin-top:2px">${fmt(yearTotal)}</div>
+      </div>
+      <div style="flex:1;min-width:120px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">TOB totaal</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text);margin-top:2px">${fmt(allTotal)}</div>
+      </div>
+    </div>
+    ${rows.length ? `<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Per positie</div>
+    ${rows.map(([tk,d])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="font-family:'DM Mono',monospace;font-weight:500">${esc(tk)}</span>
+      <span style="color:var(--text3)">${TOB_LABELS[d.type]||d.type}</span>
+      <span style="font-family:'DM Mono',monospace;color:var(--red)">${fmt(d.tob)}</span>
+    </div>`).join('')}` : `<div class="empty" style="padding:10px 0">Ken elk aandeel/ETF een TOB-type toe via "Categorie per positie" hieronder.</div>`}
+  `;
+}
 
 // ═══════════════════════════════════
 // DIVIDENDEN
@@ -1760,15 +1842,24 @@ function delTx(i){
 }
 
 function renderTxList(){
+  renderTOBCard();
   const el=document.getElementById('tx-list'), t=txs();
   if(!t.length){ el.innerHTML='<div class="empty">Geen transacties.</div>'; return; }
   el.innerHTML=[...t].reverse().map((tx,ri)=>{
     const i=t.length-1-ri;
+    const isBuy = tx.type.toUpperCase()==='BUY';
+    const tobAmt = isBuy ? calcTOB(tx.ticker, tx.qty * tx.price) : 0;
+    const tobBadge = tobAmt > 0
+      ? `<span style="font-size:10px;background:var(--redBg);color:var(--red);border-radius:3px;padding:1px 5px;font-family:'DM Mono',monospace">TOB ${fmt(tobAmt)}</span>`
+      : (isBuy && tobTypes[tx.ticker] === 'vrij'
+        ? `<span style="font-size:10px;background:var(--greenBg);color:var(--green);border-radius:3px;padding:1px 5px">TOB vrij</span>`
+        : '');
     return `<div class="txr">
       <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
         <span class="tag ${esc(tx.type.toLowerCase())}">${esc(tx.type)}</span>
         <span style="font-family:'DM Mono',monospace;font-weight:500">${esc(tx.ticker)}</span>
         <span style="color:var(--text2);font-size:12px;overflow:hidden;text-overflow:ellipsis">${esc(tx.name||'')}</span>
+        ${tobBadge}
       </div>
       <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text2);flex-shrink:0">
         <span style="font-family:'DM Mono',monospace">${tx.qty.toLocaleString('nl-BE',{maximumFractionDigits:6})} × ${fmt(tx.price)}${tx.fee?` + ${fmt(tx.fee)} kst`:''}</span>
@@ -2860,6 +2951,7 @@ document.addEventListener('change', function(e){
   if(!el) return;
   if(el.dataset.action === 'set-tgt') setTgt(el.dataset.cat, el.value);
   else if(el.dataset.action === 'set-ac') setAC(el.dataset.ticker, el.value);
+  else if(el.dataset.action === 'set-tob') setTOB(el.dataset.ticker, el.value);
 });
 
 // ═══════════════════════════════════════════
