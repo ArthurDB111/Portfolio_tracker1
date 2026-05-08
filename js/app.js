@@ -85,9 +85,60 @@ let SB_OK = false;
 // ═══════════════════════════════════════════════════════════════════════
 // SUPABASE DATASYNC — pull na login, push na elke wijziging
 // ═══════════════════════════════════════════════════════════════════════
+
+// UUID-patroon om Supabase UUIDs te herkennen (vs. frontend IDs zoals 'manual_123')
+const _UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Gedeelde logica voor manual positions sync (gebruikt door pushToSupabase + _pushManualOnly)
+async function _syncManualToSupabase(uid){
+  const bRow = (m, type) => ({
+    user_id:uid, type, name:m.name, value:m.value,
+    subcat:m.subcat||null, note:m.note||null,
+    ...(_UUID_RE.test(m.id) ? {id:m.id} : {}),
+  });
+  const cashRows = (manualPositions.cash||[]).map(m=>bRow(m,'cash'));
+  const altsRows = (manualPositions.alts||[]).map(m=>bRow(m,'alts'));
+  const toUpsert = [...cashRows,...altsRows].filter(r=>r.id);
+  const toInsert = [...cashRows,...altsRows].filter(r=>!r.id);
+  const keepIds  = toUpsert.map(r=>r.id);
+  // Verwijder enkel items die niet meer in memory staan — geen delete-all!
+  if(keepIds.length){
+    await _sb.from('manual_positions').delete().eq('user_id',uid).not('id','in',`(${keepIds.join(',')})`);
+  } else if(!toInsert.length){
+    await _sb.from('manual_positions').delete().eq('user_id',uid);
+  }
+  if(toUpsert.length) await _sb.from('manual_positions').upsert(toUpsert,{onConflict:'id'});
+  if(toInsert.length){
+    const {data:ins} = await _sb.from('manual_positions').insert(toInsert).select('id,type');
+    if(ins){
+      // Update lokale IDs met Supabase UUIDs zodat volgende push kan upserten
+      const newCash = (manualPositions.cash||[]).filter(m=>!_UUID_RE.test(m.id));
+      const newAlts = (manualPositions.alts||[]).filter(m=>!_UUID_RE.test(m.id));
+      let ci=0, ai=0;
+      ins.forEach(r=>{
+        if(r.type==='cash' && newCash[ci]){ newCash[ci].id=r.id; ci++; }
+        else if(r.type==='alts' && newAlts[ai]){ newAlts[ai].id=r.id; ai++; }
+      });
+      saveManual();
+    }
+  }
+}
+
+// Gerichte push van alleen manual positions (snel, wordt direct awaited na opslaan)
+async function _pushManualOnly(){
+  if(!SB_OK) return;
+  try{
+    const {data:{session}} = await _sb.auth.getSession();
+    if(!session?.user) return;
+    await _syncManualToSupabase(session.user.id);
+  }catch(e){ console.warn('Manual sync fout:',e); showToast('⚠️ Sync mislukt — data lokaal opgeslagen'); }
+}
+
 async function pullFromSupabase(){
   const dot = document.getElementById('sb-dot');
   const lbl = document.getElementById('sb-label');
+  // Bewaar lokale staat vóór pull — veiligheidsnet als Supabase leeg is door onderbroken push
+  const _localManual = { cash:[...(manualPositions.cash||[])], alts:[...(manualPositions.alts||[])] };
   try{
     // getSession leest lokale opslag — geen extra networkverzoek nodig
     const { data:{ session } } = await _sb.auth.getSession();
@@ -155,19 +206,27 @@ async function pullFromSupabase(){
     }
 
     if(!manRes.error && manRes.data){
-      manualPositions = { cash:[], alts:[] };
-      manRes.data.forEach(m =>{
-        const item = {
-          id: m.id,
-          name: m.name,
-          value: parseFloat(m.value),
-          subcat: m.subcat||'',
-          note: m.note||'',
-          updated: m.updated_at ? new Date(m.updated_at).toLocaleDateString('nl-BE') : '—',
-        };
-        if(m.type==='cash') manualPositions.cash.push(item);
-        else manualPositions.alts.push(item);
-      });
+      if(manRes.data.length > 0){
+        // Supabase heeft data → gebruik als bron van waarheid
+        manualPositions = { cash:[], alts:[] };
+        manRes.data.forEach(m =>{
+          const item = {
+            id: m.id,
+            name: m.name,
+            value: parseFloat(m.value),
+            subcat: m.subcat||'',
+            note: m.note||'',
+            updated: m.updated_at ? new Date(m.updated_at).toLocaleDateString('nl-BE') : '—',
+          };
+          if(m.type==='cash') manualPositions.cash.push(item);
+          else manualPositions.alts.push(item);
+        });
+      } else if(_localManual.cash.length > 0 || _localManual.alts.length > 0){
+        // Supabase is leeg maar lokale cache heeft data → bescherm lokale data
+        // Kan gebeuren als een push werd onderbroken door een refresh
+        manualPositions = _localManual;
+      }
+      // (anders: beide leeg → manualPositions blijft { cash:[], alts:[] })
     }
 
     if(!wlRes.error && wlRes.data){
@@ -191,6 +250,10 @@ async function pullFromSupabase(){
     SB_OK = true;
     if(dot) dot.className = 'sb-dot ok';
     if(lbl) lbl.textContent = 'Supabase: verbonden ✓';
+
+    // Als lokale data beschermd werd (Supabase was leeg) → hersync naar Supabase
+    const _restoredManual = manualPositions === _localManual;
+    if(_restoredManual) setTimeout(()=>_pushManualOnly(), 1000);
 
   }catch(e){
     console.warn('pullFromSupabase fout:', e);
@@ -234,39 +297,8 @@ async function pushToSupabase(){
     }));
     if(allDivs.length) await _sb.from('dividends').insert(allDivs);
 
-    // 4. Handmatige posities: upsert bestaande (Supabase-UUID), insert nieuwe
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const _buildRow = (m, type) => ({
-      user_id:uid, type, name:m.name, value:m.value,
-      subcat:m.subcat||null, note:m.note||null,
-      ...(UUID_RE.test(m.id) ? {id:m.id} : {}),
-    });
-    const _cashRows = (manualPositions.cash||[]).map(m=>_buildRow(m,'cash'));
-    const _altsRows = (manualPositions.alts||[]).map(m=>_buildRow(m,'alts'));
-    const toUpsert  = [..._cashRows,..._altsRows].filter(r=>r.id);
-    const toInsert  = [..._cashRows,..._altsRows].filter(r=>!r.id);
-    // Verwijder enkel items die niet meer in memory staan (geen delete-all!)
-    const keepIds = toUpsert.map(r=>r.id);
-    if(keepIds.length){
-      await _sb.from('manual_positions').delete().eq('user_id',uid).not('id','in',`(${keepIds.join(',')})`);
-    } else if(toInsert.length === 0){
-      await _sb.from('manual_positions').delete().eq('user_id',uid);
-    }
-    if(toUpsert.length) await _sb.from('manual_positions').upsert(toUpsert,{onConflict:'id'});
-    if(toInsert.length){
-      const {data:ins} = await _sb.from('manual_positions').insert(toInsert).select('id,type');
-      // Update lokale IDs zodat volgende push kan upserten i.p.v. opnieuw in te voegen
-      if(ins){
-        const newCash = (manualPositions.cash||[]).filter(m=>!UUID_RE.test(m.id));
-        const newAlts = (manualPositions.alts||[]).filter(m=>!UUID_RE.test(m.id));
-        let ci=0, ai=0;
-        ins.forEach(r=>{
-          if(r.type==='cash' && newCash[ci]){ newCash[ci].id=r.id; ci++; }
-          else if(r.type==='alts' && newAlts[ai]){ newAlts[ai].id=r.id; ai++; }
-        });
-        saveManual();
-      }
-    }
+    // 4. Handmatige posities
+    await _syncManualToSupabase(uid);
 
     // 5. Watchlist: verwijder alles → herplaatsen
     await _sb.from('watchlist').delete().eq('user_id', uid);
@@ -1865,7 +1897,7 @@ document.getElementById('manual-modal').addEventListener('click', e=>{
   if(e.target===e.currentTarget) closeManualModal();
 });
 
-function confirmManualModal(){
+async function confirmManualModal(){
   const name  = document.getElementById('manual-name').value.trim();
   const value = parseFloat(document.getElementById('manual-value').value);
   const subcat = document.getElementById('manual-subcat').value.trim();
@@ -1897,16 +1929,16 @@ function confirmManualModal(){
   renderManualPage(manualModalType);
   renderAll();
   showToast((manualModalType==='cash'?'Cash':'Investering')+' opgeslagen ✓');
-  if(SB_OK) pushToSupabase();
+  await _pushManualOnly(); // awaited: data staat zeker in Supabase voor refresh
 }
 
-function deleteManualItem(type, id){
+async function deleteManualItem(type, id){
   if(!confirm('Positie verwijderen?')) return;
   manualPositions[type] = (manualPositions[type]||[]).filter(i=>String(i.id)!==String(id));
   saveManual();
   renderManualPage(type);
   renderAll();
-  if(SB_OK) pushToSupabase();
+  await _pushManualOnly();
 }
 
 function renderPfPage(){
