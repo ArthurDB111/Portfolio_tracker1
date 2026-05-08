@@ -234,19 +234,39 @@ async function pushToSupabase(){
     }));
     if(allDivs.length) await _sb.from('dividends').insert(allDivs);
 
-    // 4. Handmatige posities: verwijder alles → herplaatsen
-    await _sb.from('manual_positions').delete().eq('user_id', uid);
-    const allManual = [
-      ...(manualPositions.cash||[]).map(m =>({
-        user_id:uid, type:'cash', name:m.name, value:m.value,
-        subcat:m.subcat||null, note:m.note||null,
-      })),
-      ...(manualPositions.alts||[]).map(m =>({
-        user_id:uid, type:'alts', name:m.name, value:m.value,
-        subcat:m.subcat||null, note:m.note||null,
-      })),
-    ];
-    if(allManual.length) await _sb.from('manual_positions').insert(allManual);
+    // 4. Handmatige posities: upsert bestaande (Supabase-UUID), insert nieuwe
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const _buildRow = (m, type) => ({
+      user_id:uid, type, name:m.name, value:m.value,
+      subcat:m.subcat||null, note:m.note||null,
+      ...(UUID_RE.test(m.id) ? {id:m.id} : {}),
+    });
+    const _cashRows = (manualPositions.cash||[]).map(m=>_buildRow(m,'cash'));
+    const _altsRows = (manualPositions.alts||[]).map(m=>_buildRow(m,'alts'));
+    const toUpsert  = [..._cashRows,..._altsRows].filter(r=>r.id);
+    const toInsert  = [..._cashRows,..._altsRows].filter(r=>!r.id);
+    // Verwijder enkel items die niet meer in memory staan (geen delete-all!)
+    const keepIds = toUpsert.map(r=>r.id);
+    if(keepIds.length){
+      await _sb.from('manual_positions').delete().eq('user_id',uid).not('id','in',`(${keepIds.join(',')})`);
+    } else if(toInsert.length === 0){
+      await _sb.from('manual_positions').delete().eq('user_id',uid);
+    }
+    if(toUpsert.length) await _sb.from('manual_positions').upsert(toUpsert,{onConflict:'id'});
+    if(toInsert.length){
+      const {data:ins} = await _sb.from('manual_positions').insert(toInsert).select('id,type');
+      // Update lokale IDs zodat volgende push kan upserten i.p.v. opnieuw in te voegen
+      if(ins){
+        const newCash = (manualPositions.cash||[]).filter(m=>!UUID_RE.test(m.id));
+        const newAlts = (manualPositions.alts||[]).filter(m=>!UUID_RE.test(m.id));
+        let ci=0, ai=0;
+        ins.forEach(r=>{
+          if(r.type==='cash' && newCash[ci]){ newCash[ci].id=r.id; ci++; }
+          else if(r.type==='alts' && newAlts[ai]){ newAlts[ai].id=r.id; ai++; }
+        });
+        saveManual();
+      }
+    }
 
     // 5. Watchlist: verwijder alles → herplaatsen
     await _sb.from('watchlist').delete().eq('user_id', uid);
@@ -262,6 +282,7 @@ async function pushToSupabase(){
 
   }catch(e){
     console.warn('pushToSupabase fout:', e);
+    showToast('⚠️ Sync mislukt — data lokaal opgeslagen');
   }
 }
 
@@ -1881,7 +1902,7 @@ function confirmManualModal(){
 
 function deleteManualItem(type, id){
   if(!confirm('Positie verwijderen?')) return;
-  manualPositions[type] = (manualPositions[type]||[]).filter(i=>i.id!==id);
+  manualPositions[type] = (manualPositions[type]||[]).filter(i=>String(i.id)!==String(id));
   saveManual();
   renderManualPage(type);
   renderAll();
@@ -2398,6 +2419,8 @@ async function doForgotPassword(){
 
 // ── Uitloggen ─────────────────────────────────
 async function doLogout(){
+  // Eerst data syncen vóór sessie wordt afgesloten
+  if(SB_OK) try{ await pushToSupabase(); }catch(e){}
   await _sb.auth.signOut();
   localStorage.removeItem('ptx_username');
   _showAuth();
