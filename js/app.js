@@ -487,6 +487,7 @@ async function syncPrices(){
   btn.classList.remove('syncing'); ico.classList.remove('spin');
   showToast(`${ok} ticker${ok!==1?'s':''} bijgewerkt${fail?' · '+fail+' mislukt':''}`);
   renderAll();
+  checkWLAlerts();
   if(SB_OK) pushToSupabase();
 }
 
@@ -2250,10 +2251,14 @@ function updateCashPayOptions(){
 // ═══════════════════════════════════════════
 let watchlist = [];
 let wlSelectedSymbol = null;
+let wlAlerts = {}; // ticker → { above: null|number, below: null|number }
+const _wlAlertFired = new Set(); // session-only, avoid repeated toasts
 
 function loadWatchlist(){
   try{ watchlist = JSON.parse(localStorage.getItem('ptx_watchlist')||'[]'); }
   catch(e){ watchlist=[]; }
+  try{ wlAlerts = JSON.parse(localStorage.getItem('ptx_wla')||'{}'); }
+  catch(e){ wlAlerts={}; }
 }
 
 function saveWatchlist(){
@@ -2311,8 +2316,38 @@ function addToWatchlist(){
 
 function removeFromWatchlist(ticker){
   watchlist = watchlist.filter(w=>w.ticker!==ticker);
+  delete wlAlerts[ticker];
+  localStorage.setItem('ptx_wla', JSON.stringify(wlAlerts));
   saveWatchlist();
   renderWatchlist();
+}
+
+function setWLAlert(ticker, field, val){
+  if(!wlAlerts[ticker]) wlAlerts[ticker]={above:null,below:null};
+  const n = parseFloat(String(val).replace(',','.'));
+  wlAlerts[ticker][field] = (!val || isNaN(n) || n<=0) ? null : n;
+  if(!wlAlerts[ticker].above && !wlAlerts[ticker].below) delete wlAlerts[ticker];
+  localStorage.setItem('ptx_wla', JSON.stringify(wlAlerts));
+  _wlAlertFired.delete(ticker+'_above');
+  _wlAlertFired.delete(ticker+'_below');
+}
+
+function checkWLAlerts(){
+  watchlist.forEach(w => {
+    const p = prices[w.ticker];
+    if(!p || !p.price) return;
+    const a = wlAlerts[w.ticker];
+    if(!a) return;
+    const cur = p.price;
+    if(a.above && cur >= a.above){
+      const k = w.ticker+'_above';
+      if(!_wlAlertFired.has(k)){ _wlAlertFired.add(k); showToast(`🔔 ${w.ticker} boven ${fmt(a.above)} — nu ${fmt(cur)}`); }
+    }
+    if(a.below && cur <= a.below){
+      const k = w.ticker+'_below';
+      if(!_wlAlertFired.has(k)){ _wlAlertFired.add(k); showToast(`🔔 ${w.ticker} onder ${fmt(a.below)} — nu ${fmt(cur)}`); }
+    }
+  });
 }
 
 async function syncPricesForTickers(tickers){
@@ -2320,6 +2355,7 @@ async function syncPricesForTickers(tickers){
   try{
     const r = await serverFetch('/prices', {method:'POST', body:JSON.stringify({tickers})});
     if(r) Object.assign(prices, r);
+    checkWLAlerts();
     renderWatchlist();
   } catch(e){}
 }
@@ -2333,14 +2369,38 @@ function renderWatchlist(){
     const priceStr = p ? fmt(p.price) : '—';
     const chgStr   = p ? (p.changePercent>=0?'+':'')+p.changePercent.toFixed(2)+'%' : '';
     const chgClass = p ? (p.changePercent>=0?'pos':'neg') : '';
-    return `<div class="txr">
+    const cur = p?.price||0;
+    const a = wlAlerts[w.ticker]||{};
+    const aboveHit = a.above && cur>0 && cur >= a.above;
+    const belowHit = a.below && cur>0 && cur <= a.below;
+    const alertBadge = aboveHit
+      ? `<span style="font-size:10px;background:var(--greenBg);color:var(--green);border-radius:3px;padding:1px 6px;flex-shrink:0">🔔 ▲ ${fmt(a.above)}</span>`
+      : belowHit
+      ? `<span style="font-size:10px;background:var(--redBg);color:var(--red);border-radius:3px;padding:1px 6px;flex-shrink:0">🔔 ▼ ${fmt(a.below)}</span>`
+      : '';
+    const belowBorder = belowHit ? 'var(--red)' : 'var(--border)';
+    const aboveBorder = aboveHit ? 'var(--green)' : 'var(--border)';
+    const belowColor  = belowHit ? 'var(--red)' : 'var(--text)';
+    const aboveColor  = aboveHit ? 'var(--green)' : 'var(--text)';
+    return `<div class="txr" style="flex-wrap:wrap;gap:8px">
       <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
         <span style="font-family:'DM Mono',monospace;font-weight:500;color:var(--blue);min-width:80px">${w.ticker}</span>
         <span style="color:var(--text2);font-size:12px">${w.name}</span>
+        ${alertBadge}
       </div>
-      <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap">
         <span style="font-family:'DM Mono',monospace;font-size:13px">${priceStr}</span>
-        <span class="chg ${chgClass}" style="font-size:12px;min-width:60px;text-align:right">${chgStr}</span>
+        <span class="chg ${chgClass}" style="font-size:12px;min-width:54px;text-align:right">${chgStr}</span>
+        <div style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--text3)">
+          <span title="Alarm onder">▼</span>
+          <input type="number" data-action="set-wl-alert" data-ticker="${w.ticker}" data-field="below"
+            value="${a.below||''}" placeholder="onder" min="0" step="0.01"
+            style="width:66px;background:var(--bg3);border:1px solid ${belowBorder};border-radius:var(--r);padding:3px 5px;color:${belowColor};font-size:11px;font-family:'DM Mono',monospace;outline:none">
+          <span title="Alarm boven">▲</span>
+          <input type="number" data-action="set-wl-alert" data-ticker="${w.ticker}" data-field="above"
+            value="${a.above||''}" placeholder="boven" min="0" step="0.01"
+            style="width:66px;background:var(--bg3);border:1px solid ${aboveBorder};border-radius:var(--r);padding:3px 5px;color:${aboveColor};font-size:11px;font-family:'DM Mono',monospace;outline:none">
+        </div>
         <button data-action="wl-to-tx" data-ticker="${w.ticker}" data-name="${w.name.replace(/"/g,'&quot;')}"
           style="padding:4px 8px;background:var(--blueBg);border:1px solid rgba(77,143,255,.3);border-radius:var(--r);color:var(--blue);font-size:11px;cursor:pointer">
           + Kopen
@@ -2952,6 +3012,7 @@ document.addEventListener('change', function(e){
   if(el.dataset.action === 'set-tgt') setTgt(el.dataset.cat, el.value);
   else if(el.dataset.action === 'set-ac') setAC(el.dataset.ticker, el.value);
   else if(el.dataset.action === 'set-tob') setTOB(el.dataset.ticker, el.value);
+  else if(el.dataset.action === 'set-wl-alert') setWLAlert(el.dataset.ticker, el.dataset.field, el.value);
 });
 
 // ═══════════════════════════════════════════
